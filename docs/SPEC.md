@@ -237,7 +237,17 @@ JSON route handlers under `/app/api`. Dates are `YYYY-MM-DD`.
 | GET `/api/review/due` | Due today or earlier | `limit?`, `all?` |
 | GET `/api/progress` | Per-pattern counts | |
 
-Validation: `rating` must be `easy`, `struggled`, or `needed_solution` (400); a future `attempted_on` is 400; unknown problem ids, or an attempt id that does not belong to the problem, return 404.
+Validation: `rating` must be `easy`, `struggled`, or `needed_solution` (400); a future or impossible `attempted_on` is 400; unknown problem ids, or an attempt id that does not belong to the problem, return 404.
+
+### API details
+
+- **Naming:** request bodies use `attempted_on` (as above); every response uses camelCase (`nextReview`, `intervalDays`, `daysOverdue`, ...).
+- **Responses:** errors are `{ "error": "message" }`. `POST .../attempts` returns `201 { attemptId, reviewState }` (the `attemptId` is what Undo deletes). `DELETE` returns `{ reviewState }` (`null` when the problem went back to unsolved). `PATCH .../insight` returns `{ insight }`. `GET /api/review/due` returns `{ total, items }`, where `total` is the full due count and `items` is cut to the limit. `GET /api/progress` returns `{ totals, patterns }`, with patterns in NeetCode order and `totals.attemptsLast7Days` counting today and the 6 days before.
+- **Bad input:** all fields are checked before the database is touched, so a bad request saves nothing. Malformed or non-numeric ids are 404. `insight` is trimmed, at most 500 characters, and blank means "none"; `PATCH` requires the `insight` field to be present. `minutes` is a whole number from 0 to 1440.
+- **Request safety:** the app has no login, so every route rejects (403) any request whose `Host` is not `localhost`, `127.0.0.1` or `[::1]` (this stops DNS rebinding). Requests that change data (POST, PATCH, DELETE) are also rejected if a browser says they came from another origin (`Origin` differs from `Host`, or `Sec-Fetch-Site` is not `same-origin`/`none`). Requests with no `Origin` (curl, scripts) are allowed.
+- **Concurrency:** logging or deleting an attempt locks the problem's row for the length of its transaction, so two simultaneous requests for one problem take turns.
+- **"Today"** is the local calendar date (`lib/today.ts`), rolling over at midnight. Only the routes call it; the scheduler is always handed the date.
+- **Caching:** `cacheComponents` is switched off in `next.config.ts` so that routes always run fresh. All API routes build as dynamic.
 
 ---
 
@@ -271,6 +281,14 @@ Explain the plan before each stage; check each before starting the next. Commit 
 - Replay of no attempts returns null.
 - Deleting the last attempt from the worked example sequence (replay of the first n − 1) restores the previous row.
 - Due on its next_review date and not the day before; retired is never due.
+
+### Test layout
+
+- `tests/scheduler.test.ts`, `today.test.ts`, `validate.test.ts`, `request-check.test.ts`: pure unit tests, no database.
+- `tests/attempts.test.ts`, `queries.test.ts`: database tests run inside a transaction that is always rolled back, using throwaway problems with high ids.
+- `tests/routes.test.ts`: calls the real route handlers; creates throwaway problems (ids 995001+) in the dev database and deletes them afterwards.
+- `tests/seed.test.ts`: runs the seed script as a command against the dev database.
+- `tests/setup-env.ts` forces `DATABASE_URL` to the dev database for every test, and refuses to run if it is not a `*_dev` database.
 
 ### Acceptance checklist
 

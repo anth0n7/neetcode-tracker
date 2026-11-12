@@ -7,5 +7,9 @@ export default defineConfig({
   },
   test: {
     include: ["tests/**/*.test.ts"],
+    // Points DATABASE_URL at the DEV database before any test runs.
+    setupFiles: ["tests/setup-env.ts"],
+    // Several test files share the dev database, so run them one at a time.
+    fileParallelism: false,
   },
 });

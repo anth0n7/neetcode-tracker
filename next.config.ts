@@ -1,9 +1,9 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
-  cacheComponents: true,
-  partialPrefetching: true,
+  // Cache Components is deliberately OFF. This app must always show live data
+  // (what is due today changes by the day), so every route should run fresh on
+  // each request. With the flag off, route handlers are never cached by default.
   turbopack: {
     rules: {
       "*.css": {
