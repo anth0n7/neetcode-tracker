@@ -2,7 +2,7 @@
 
 ## Commands
 - `npm run check` — lint, typecheck, tests
-- `npm run test:db:up` — start test Postgres (port 5433)
+- `npm run test:db:up` — start test Postgres (port 5433); `npm run test:db:down` stops and wipes it
 - `npm run dev` — dev server
 
 ## Plan
