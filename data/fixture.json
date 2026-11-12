@@ -1,0 +1,7 @@
+[
+  { "id": 9001, "position": 1, "title": "Fixture: Hashing A", "slug": "fixture-hashing-a", "url": "https://example.com/fixture/hashing-a", "pattern": "Fixture Hashing", "difficulty": "Easy" },
+  { "id": 9002, "position": 2, "title": "Fixture: Hashing B", "slug": "fixture-hashing-b", "url": "https://example.com/fixture/hashing-b", "pattern": "Fixture Hashing", "difficulty": "Medium" },
+  { "id": 9003, "position": 3, "title": "Fixture: Window A", "slug": "fixture-window-a", "url": "https://example.com/fixture/window-a", "pattern": "Fixture Window", "difficulty": "Medium" },
+  { "id": 9004, "position": 4, "title": "Fixture: Window B", "slug": "fixture-window-b", "url": "https://example.com/fixture/window-b", "pattern": "Fixture Window", "difficulty": "Hard" },
+  { "id": 9005, "position": 5, "title": "Fixture: Graph A", "slug": "fixture-graph-a", "url": "https://example.com/fixture/graph-a", "pattern": "Fixture Graph", "difficulty": "Hard" }
+]

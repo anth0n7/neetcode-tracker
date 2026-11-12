@@ -10,7 +10,9 @@
     "test": "vitest run",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
-    "db:migrate:dev": "DB_ENV=dev drizzle-kit migrate"
+    "db:migrate:dev": "DB_ENV=dev drizzle-kit migrate",
+    "seed": "tsx scripts/seed.ts data/neetcode250.json",
+    "seed:dev": "tsx scripts/seed.ts data/fixture.json --dev"
   },
   "dependencies": {
     "@next/env": "^16.4.6",
