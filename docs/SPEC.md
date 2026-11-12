@@ -56,7 +56,7 @@ A single-user web app that tracks the NeetCode 250 problem list and shows each d
 | `neetcode_tracker` | `.env.local` | `npm start`, `npm run deploy`, `npm run seed` | `data/neetcode250.json` only |
 | `neetcode_tracker_dev` | `.env.development.local` | `npm run dev`, `npm run db:migrate:dev`, `npm run seed:dev` | `data/fixture.json` |
 
-Next.js loads `.env.development.local` over `.env.local` under `next dev`. Scripts run outside Next (seed, Drizzle migrations) load the env file explicitly via `@next/env`'s `loadEnvConfig(dir, dev)`, so `seed:dev` / `db:migrate:dev` pass `dev = true`. `seed.ts` refuses to load `fixture.json` unless the target database name ends in `_dev`, so fixture rows can never reach the real database.
+Next.js loads `.env.development.local` over `.env.local` under `next dev`. Scripts run outside Next (seed, Drizzle migrations) load the env file explicitly via `@next/env`'s `loadEnvConfig(dir, dev)`, so `seed:dev` / `db:migrate:dev` pass `dev = true`. `seed.ts` refuses to load `fixture.json` unless the target database name ends in `_dev` or `_test` (the automated tests' database), so fixture rows can never reach the real database.
 
 ### Steps
 
@@ -147,7 +147,7 @@ The list is never written from memory.
    }
    ```
 3. `scripts/seed.ts <file>` upserts by id; re-running never duplicates rows or touches attempts or insights.
-4. It fails if any entry is missing a field. For `neetcode250.json` it also fails unless there are exactly 250 entries. `data/fixture.json` (~5 problems) is exempt from the count, is used for development until the real list exists, and may only be seeded into `neetcode_tracker_dev`.
+4. It fails if any entry is missing a field. For `neetcode250.json` it also fails unless there are exactly 250 entries. `data/fixture.json` (~5 problems) is exempt from the count, is used for development until the real list exists, and may only be seeded into a throwaway database (a name ending in `_dev` or `_test`).
 
 ---
 
@@ -286,9 +286,25 @@ Explain the plan before each stage; check each before starting the next. Commit 
 
 - `tests/scheduler.test.ts`, `today.test.ts`, `validate.test.ts`, `request-check.test.ts`: pure unit tests, no database.
 - `tests/attempts.test.ts`, `queries.test.ts`: database tests run inside a transaction that is always rolled back, using throwaway problems with high ids.
-- `tests/routes.test.ts`: calls the real route handlers; creates throwaway problems (ids 995001+) in the dev database and deletes them afterwards.
-- `tests/seed.test.ts`: runs the seed script as a command against the dev database.
-- `tests/setup-env.ts` forces `DATABASE_URL` to the dev database for every test, and refuses to run if it is not a `*_dev` database.
+- `tests/routes.test.ts`: calls the real route handlers; creates its three throwaway problems before each test.
+- `tests/seed.test.ts`: runs the seed script as a command against the test database.
+- `tests/test-database.test.ts`: a small end-to-end example proving the test database, migrations and per-test reset work.
+
+### Test database
+
+Tests never touch the dev or real database. They use a throwaway Postgres 17 in Docker (`docker-compose.test.yml`): port 5433, bound to 127.0.0.1, storage in memory (tmpfs), so stopping it wipes everything.
+
+- `tests/test-db.ts` holds the one allowed URL (`postgres://test:test@localhost:5433/neetcode_tracker_test`) and a guard that throws unless host, port and database name all match exactly. There is no environment variable to override it.
+- `tests/global-setup.ts` runs once: it checks the guard, confirms `current_database()`, and applies the migrations in `/drizzle`.
+- `tests/setup-env.ts` points `DATABASE_URL` at the test database for every test file (and re-checks the guard).
+- `tests/setup-db.ts` truncates every table in the `public` schema before every test.
+- No mocking of the database anywhere.
+
+### Commands
+
+- `npm run check`: lint, then typecheck, then start the test database (`test:db:up`), then all tests; stops at the first failure. Needs Docker running.
+- `npm run test:db:up` / `npm run test:db:down`: start / stop (and wipe) the test database.
+- `npm test`: just the tests (the test database must already be up).
 
 ### Acceptance checklist
 

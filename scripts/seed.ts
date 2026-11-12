@@ -91,10 +91,13 @@ async function main() {
   const dbName = new URL(url).pathname.slice(1); // "postgres://host/NAME" -> "NAME"
 
   // --- 4. Safety checks ---
-  // The 5 fake fixture problems must never end up in the real database.
+  // The 5 fake fixture problems must never end up in the real database. They may
+  // only go into a throwaway one: a *_dev database, or the *_test database the
+  // automated tests use.
   const isFixture = path.basename(file) === "fixture.json";
-  if (isFixture && !dbName.endsWith("_dev")) {
-    fail(`refusing to seed the fixture into "${dbName}" (only *_dev databases)`);
+  const isThrowawayDb = dbName.endsWith("_dev") || dbName.endsWith("_test");
+  if (isFixture && !isThrowawayDb) {
+    fail(`refusing to seed the fixture into "${dbName}" (only *_dev or *_test databases)`);
   }
   // And --dev should really mean a dev database.
   if (!isFixture && dbName.endsWith("_dev") === false && dev) {

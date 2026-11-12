@@ -12,7 +12,11 @@
     "db:migrate": "drizzle-kit migrate",
     "db:migrate:dev": "DB_ENV=dev drizzle-kit migrate",
     "seed": "tsx scripts/seed.ts data/neetcode250.json",
-    "seed:dev": "tsx scripts/seed.ts data/fixture.json --dev"
+    "seed:dev": "tsx scripts/seed.ts data/fixture.json --dev",
+    "typecheck": "tsc --noEmit",
+    "test:db:up": "docker compose -f docker-compose.test.yml up -d --wait",
+    "test:db:down": "docker compose -f docker-compose.test.yml down",
+    "check": "npm run lint && npm run typecheck && npm run test:db:up && npm test"
   },
   "dependencies": {
     "@next/env": "^16.4.6",

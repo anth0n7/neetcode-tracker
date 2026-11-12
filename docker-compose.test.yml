@@ -1,0 +1,25 @@
+# A throwaway Postgres just for the automated tests.
+#
+#   npm run test:db:up     start it (npm run check does this for you)
+#   npm run test:db:down   stop it; everything in it is wiped
+#
+# It is separate from your dev and real databases (those are on 5432):
+#   - port 5433, bound to this machine only
+#   - the data lives in memory (tmpfs), so stopping the container wipes it
+#   - same Postgres major version as the local install (17)
+services:
+  postgres-test:
+    image: postgres:17
+    ports:
+      - "127.0.0.1:5433:5432"
+    environment:
+      POSTGRES_USER: test
+      POSTGRES_PASSWORD: test
+      POSTGRES_DB: neetcode_tracker_test
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U test -d neetcode_tracker_test"]
+      interval: 1s
+      timeout: 3s
+      retries: 30

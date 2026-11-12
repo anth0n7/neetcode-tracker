@@ -1,9 +1,8 @@
 // Tests for the API routes, called the way Next.js calls them: with a Request in,
-// a Response out. They use the DEV database. Routes can't be rolled back, so the
-// tests create their own throwaway problems (ids 995001+) and delete them, along
-// with everything logged against them, when finished.
-import { inArray } from "drizzle-orm";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+// a Response out. They use the TEST database (see tests/test-db.ts). Routes can't
+// be rolled back, so instead every test starts from an empty database (wiped by
+// tests/setup-db.ts) and creates the three problems it needs in beforeEach.
+import { beforeEach, describe, expect, it } from "vitest";
 import { GET as listProblems } from "@/app/api/problems/route";
 import { GET as getProblem } from "@/app/api/problems/[id]/route";
 import { POST as postAttempt } from "@/app/api/problems/[id]/attempts/route";
@@ -11,7 +10,7 @@ import { DELETE as deleteAttempt } from "@/app/api/problems/[id]/attempts/[attem
 import { PATCH as patchInsight } from "@/app/api/problems/[id]/insight/route";
 import { GET as getDue } from "@/app/api/review/due/route";
 import { GET as getProgress } from "@/app/api/progress/route";
-import { attempts, problems, reviewState } from "@/db/schema";
+import { problems } from "@/db/schema";
 import { db } from "@/lib/db";
 import { addDays } from "@/lib/scheduler";
 import { todayLocal } from "@/lib/today";
@@ -24,22 +23,14 @@ const OTHER = 995_002;
 const SPARE = 995_003;
 const IDS = [FLOW, OTHER, SPARE];
 
-beforeAll(async () => {
-  await cleanup(); // in case an earlier run was interrupted
+// Runs after the reset in tests/setup-db.ts, so these are the only rows in the database.
+beforeEach(async () => {
   await db.insert(problems).values([
     { id: FLOW, position: 995_001, title: "API Flow Problem", slug: "t-api-flow", url: "https://example.com/flow", pattern: PATTERN, difficulty: "Hard" },
     { id: OTHER, position: 995_002, title: "API Other Problem", slug: "t-api-other", url: "https://example.com/other", pattern: PATTERN, difficulty: "Easy" },
     { id: SPARE, position: 995_003, title: "API Spare Problem", slug: "t-api-spare", url: "https://example.com/spare", pattern: PATTERN, difficulty: "Medium" },
   ]);
 });
-
-afterAll(cleanup);
-
-async function cleanup() {
-  await db.delete(attempts).where(inArray(attempts.problemId, IDS));
-  await db.delete(reviewState).where(inArray(reviewState.problemId, IDS));
-  await db.delete(problems).where(inArray(problems.id, IDS));
-}
 
 // --- helpers to call a route handler like Next would ---
 
@@ -216,12 +207,19 @@ describe("GET /api/problems", () => {
   const list = (qs: string) => call(listProblems as Handler, "GET", `/api/problems?${qs}`);
   const ids = (r: { body: { id: number }[] }) => r.body.map((p) => p.id);
 
+  // Every test here expects SPARE to be "in review" (due in 2 days) and the
+  // other two problems to be unsolved. The database is empty at the start of
+  // each test, so set that up explicitly.
+  beforeEach(async () => {
+    await log(SPARE, { rating: "needed_solution" });
+  });
+
   it("filters by pattern, difficulty, status and search, and combines them", async () => {
     const p = encodeURIComponent(PATTERN);
     expect(ids(await list(`pattern=${p}`))).toEqual(IDS);
     expect(ids(await list(`pattern=${p}&difficulty=Hard`))).toEqual([FLOW]);
     expect(ids(await list(`pattern=${p}&q=spare`))).toEqual([SPARE]);
-    expect(ids(await list(`pattern=${p}&status=unsolved`))).toEqual([FLOW, OTHER]); // SPARE was attempted earlier
+    expect(ids(await list(`pattern=${p}&status=unsolved`))).toEqual([FLOW, OTHER]); // SPARE was attempted in beforeEach
     expect(ids(await list(`pattern=${p}&status=in review`))).toEqual([SPARE]);
     expect(ids(await list(`pattern=${p}&difficulty=Medium&status=in review&q=API`))).toEqual([SPARE]);
     expect(ids(await list(`pattern=${p}&difficulty=Easy&status=in review`))).toEqual([]);
@@ -264,6 +262,7 @@ describe("GET /api/review/due", () => {
 
 describe("GET /api/progress", () => {
   it("returns totals and per-pattern counts", async () => {
+    await log(SPARE, { rating: "needed_solution" }); // makes exactly one of the three problems solved
     const r = await call(getProgress as Handler, "GET", "/api/progress");
     expect(r.status).toBe(200);
     expect(r.body.totals).toMatchObject({ problems: expect.any(Number), attemptsLast7Days: expect.any(Number) });
