@@ -141,4 +141,13 @@ describe("parseProblemFilters", () => {
     expect(httpError(() => parseProblemFilters(new URLSearchParams("difficulty=Brutal"))).status).toBe(400);
     expect(httpError(() => parseProblemFilters(new URLSearchParams("status=done"))).status).toBe(400);
   });
+
+  // SM-2 never retires a problem, so "retired" is no longer a status.
+  it("rejects the old status 'retired' with 400", () => {
+    expect(httpError(() => parseProblemFilters(new URLSearchParams("status=retired"))).status).toBe(400);
+  });
+
+  it.each(["unsolved", "in review", "mastered"])("accepts the status %s", (status) => {
+    expect(parseProblemFilters(new URLSearchParams({ status }))).toEqual({ status });
+  });
 });

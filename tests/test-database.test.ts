@@ -26,19 +26,19 @@ describe("the test database", () => {
       difficulty: "Easy",
     });
 
-    // First attempt, rated Easy: the schedule rules say 7 days.
+    // First attempt, rated Easy: SM-2 says review again in 1 day, ease factor 2.60.
     const result = await logAttempt(1, {
       rating: "easy",
       minutes: null,
       insight: null,
       attemptedOn: "2026-01-01",
     });
-    expect(result.reviewState).toMatchObject({ intervalDays: 7, nextReview: "2026-01-08", status: "in_review" });
+    expect(result.reviewState).toMatchObject({ intervalDays: 1, easeFactor: 260, repetitions: 1, nextReview: "2026-01-02" });
 
     // Read it back with separate queries: both rows were really saved.
     expect(await db.select().from(attempts).where(eq(attempts.problemId, 1))).toHaveLength(1);
     const [saved] = await db.select().from(reviewState).where(eq(reviewState.problemId, 1));
-    expect(saved).toMatchObject({ intervalDays: 7, nextReview: "2026-01-08", timesReviewed: 1 });
+    expect(saved).toMatchObject({ intervalDays: 1, easeFactor: 260, nextReview: "2026-01-02", timesReviewed: 1 });
   });
 
   it("starts the next test with empty tables (the data was reset)", async () => {

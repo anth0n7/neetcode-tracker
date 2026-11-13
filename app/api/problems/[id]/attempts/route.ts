@@ -1,6 +1,8 @@
 // POST /api/problems/:id/attempts - log an attempt and update the schedule.
 // Body: { rating, minutes?, insight?, attempted_on? }   (attempted_on = YYYY-MM-DD)
 // Replies 201 with { attemptId, reviewState }. The attemptId is what "Undo" uses.
+// The reviewState shows the ease factor as a decimal (see lib/api-shape.ts).
+import { reviewStateToApi } from "@/lib/api-shape";
 import { logAttempt } from "@/lib/attempts";
 import { handle, readJsonObject } from "@/lib/route";
 import { todayLocal } from "@/lib/today";
@@ -25,6 +27,7 @@ export async function POST(request: Request, ctx: { params: Promise<{ id: string
       attemptedOn: parseAttemptedOn(body.attempted_on, todayLocal()),
     };
 
-    return Response.json(await logAttempt(problemId, input), { status: 201 });
+    const { attemptId, reviewState } = await logAttempt(problemId, input);
+    return Response.json({ attemptId, reviewState: reviewStateToApi(reviewState) }, { status: 201 });
   });
 }

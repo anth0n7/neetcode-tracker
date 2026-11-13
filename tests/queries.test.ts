@@ -1,7 +1,7 @@
-// Tests for lib/queries.ts (the read side) against the dev database. Each test
+// Tests for lib/queries.ts (the read side) against the test database. Each test
 // builds its own throwaway problems inside a transaction that is rolled back.
 //
-// The dev database may hold other problems too, so tests either look only at
+// The database may hold other problems too, so tests either look only at
 // their own problems (by id or by a unique pattern name) or compare counts
 // before and after adding theirs.
 import { describe, expect, it } from "vitest";
@@ -9,8 +9,9 @@ import { logAttempt, type Conn, type AttemptInput } from "@/lib/attempts";
 import { getDue, getProblem, getProgress, listProblems } from "@/lib/queries";
 import { day, makeProblem, TODAY, withRollback } from "./helpers";
 
-// Log an Easy at each of these day offsets, in order. Attempts that land on or
-// after the review date count, so the offsets below are chosen to walk the ladder.
+// Log an Easy at each of these day offsets, in order. The offsets below are
+// chosen so every Easy lands on (or after) the date the previous one scheduled,
+// so each one counts and the gap grows.
 async function easyAt(tx: Conn, id: number, ...offsets: number[]) {
   for (const o of offsets) await logAttempt(id, attempt(o, "easy"), tx);
 }
@@ -21,31 +22,31 @@ const attempt = (offset: number, rating: AttemptInput["rating"], insight: string
   attemptedOn: day(offset),
 });
 
-// Ready-made journeys, relative to today (offset 0):
-//   inReviewDue:    one Easy 10 days ago -> next review 3 days ago (3 days overdue)
-//   inReviewLater:  one Easy yesterday   -> next review in 6 days
-//   mastered:       Easy at -100,-93,-79,-51 -> mastered, 90-day recheck in 39 days
-//   retired:        Easy at -300,-293,-279,-251,-161 -> retired
+// Ready-made journeys, relative to today (offset 0). SM-2 gaps for all-Easy: 1, 6, 16, 45 days.
+//   inReviewDue:    one Easy 10 days ago -> gap 1, next review 9 days ago (9 days overdue)
+//   inReviewLater:  one Easy today       -> gap 1, next review tomorrow
+//   mastered:       Easy at -33,-32,-26,-10 -> gap 45, next review in 35 days (mastered, not due)
+//   masteredDue:    Easy at -100,-99,-93,-77 -> gap 45, next review 32 days ago (mastered and due again)
 const inReviewDue = (tx: Conn, id: number) => easyAt(tx, id, -10);
-const inReviewLater = (tx: Conn, id: number) => easyAt(tx, id, -1);
-const mastered = (tx: Conn, id: number) => easyAt(tx, id, -100, -93, -79, -51);
-const retired = (tx: Conn, id: number) => easyAt(tx, id, -300, -293, -279, -251, -161);
+const inReviewLater = (tx: Conn, id: number) => easyAt(tx, id, 0);
+const mastered = (tx: Conn, id: number) => easyAt(tx, id, -33, -32, -26, -10);
+const masteredDue = (tx: Conn, id: number) => easyAt(tx, id, -100, -99, -93, -77);
 
 let patternCounter = 0;
 const uniquePattern = () => `T-Pattern-${Date.now()}-${patternCounter++}`;
 
 describe("listProblems", () => {
-  // Builds 4 problems in one pattern: unsolved, in review (due), mastered, retired.
+  // Builds 4 problems in one pattern: unsolved, in review (due), mastered, in review (not due yet).
   async function build(tx: Conn) {
     const pattern = uniquePattern();
     const unsolved = await makeProblem(tx, { pattern, difficulty: "Easy", title: "Alpha Sum" });
     const due = await makeProblem(tx, { pattern, difficulty: "Medium", title: "Beta Window" });
     const done = await makeProblem(tx, { pattern, difficulty: "Hard", title: "Gamma Graph" });
-    const gone = await makeProblem(tx, { pattern, difficulty: "Hard", title: "Delta Sum" });
+    const later = await makeProblem(tx, { pattern, difficulty: "Hard", title: "Delta Sum" });
     await inReviewDue(tx, due);
     await mastered(tx, done);
-    await retired(tx, gone);
-    return { pattern, unsolved, due, done, gone };
+    await inReviewLater(tx, later);
+    return { pattern, unsolved, due, done, later };
   }
 
   it("returns each problem with its status and schedule, in list order", () =>
@@ -53,12 +54,12 @@ describe("listProblems", () => {
       const p = await build(tx);
       const rows = await listProblems({ pattern: p.pattern }, TODAY, tx);
 
-      expect(rows.map((r) => r.id)).toEqual([p.unsolved, p.due, p.done, p.gone]);
-      expect(rows.map((r) => r.status)).toEqual(["unsolved", "in review", "mastered", "retired"]);
+      expect(rows.map((r) => r.id)).toEqual([p.unsolved, p.due, p.done, p.later]);
+      expect(rows.map((r) => r.status)).toEqual(["unsolved", "in review", "mastered", "in review"]);
       expect(rows[0]).toMatchObject({ nextReview: null, due: false, daysOverdue: 0, intervalDays: null });
-      expect(rows[1]).toMatchObject({ nextReview: day(-3), due: true, daysOverdue: 3, intervalDays: 7 });
-      expect(rows[2]).toMatchObject({ nextReview: day(39), due: false, intervalDays: 90 });
-      expect(rows[3]).toMatchObject({ nextReview: null, due: false });
+      expect(rows[1]).toMatchObject({ nextReview: day(-9), due: true, daysOverdue: 9, intervalDays: 1 });
+      expect(rows[2]).toMatchObject({ nextReview: day(35), due: false, intervalDays: 45 });
+      expect(rows[3]).toMatchObject({ nextReview: day(1), due: false, intervalDays: 1 });
     }));
 
   it("filters by status", () =>
@@ -67,16 +68,15 @@ describe("listProblems", () => {
       const ids = async (status: string) =>
         (await listProblems({ pattern: p.pattern, status }, TODAY, tx)).map((r) => r.id);
       expect(await ids("unsolved")).toEqual([p.unsolved]);
-      expect(await ids("in review")).toEqual([p.due]);
+      expect(await ids("in review")).toEqual([p.due, p.later]);
       expect(await ids("mastered")).toEqual([p.done]);
-      expect(await ids("retired")).toEqual([p.gone]);
     }));
 
   it("filters by difficulty and by pattern", () =>
     withRollback(async (tx) => {
       const p = await build(tx);
       const hard = await listProblems({ pattern: p.pattern, difficulty: "Hard" }, TODAY, tx);
-      expect(hard.map((r) => r.id)).toEqual([p.done, p.gone]);
+      expect(hard.map((r) => r.id)).toEqual([p.done, p.later]);
       expect(await listProblems({ pattern: "no such pattern" }, TODAY, tx)).toEqual([]);
     }));
 
@@ -84,19 +84,19 @@ describe("listProblems", () => {
     withRollback(async (tx) => {
       const p = await build(tx);
       const found = await listProblems({ pattern: p.pattern, q: "sUm" }, TODAY, tx);
-      expect(found.map((r) => r.id)).toEqual([p.unsolved, p.gone]); // Alpha Sum, Delta Sum
+      expect(found.map((r) => r.id)).toEqual([p.unsolved, p.later]); // Alpha Sum, Delta Sum
     }));
 
   it("combines filters (all must match)", () =>
     withRollback(async (tx) => {
       const p = await build(tx);
       const rows = await listProblems(
-        { pattern: p.pattern, difficulty: "Hard", status: "retired", q: "delta" },
+        { pattern: p.pattern, difficulty: "Hard", status: "in review", q: "delta" },
         TODAY,
         tx,
       );
-      expect(rows.map((r) => r.id)).toEqual([p.gone]);
-      const none = await listProblems({ pattern: p.pattern, difficulty: "Easy", status: "retired" }, TODAY, tx);
+      expect(rows.map((r) => r.id)).toEqual([p.later]);
+      const none = await listProblems({ pattern: p.pattern, difficulty: "Easy", status: "mastered" }, TODAY, tx);
       expect(none).toEqual([]);
     }));
 
@@ -121,10 +121,28 @@ describe("getProblem", () => {
       expect(p).not.toBeNull();
       expect(p!.id).toBe(id);
       expect(p!.status).toBe("in review");
-      expect(p!.reviewState).toMatchObject({ timesReviewed: 2, intervalDays: 7 });
       expect(p!.attempts.map((a) => a.attemptedOn)).toEqual([day(-8), day(-10)]);
       expect(p!.attempts[1]).toMatchObject({ rating: "needed_solution", minutes: 30 });
       expect(p!.attempts[0]).toMatchObject({ rating: "easy", insight: "sort first" });
+    }));
+
+  // The schedule is shown the way API clients see it: the ease factor as a
+  // decimal (2.6, not 260), the SM-2 fields present, and no status field.
+  it("shows the schedule with a decimal ease factor, repetitions and no status", () =>
+    withRollback(async (tx) => {
+      const id = await makeProblem(tx);
+      await logAttempt(id, attempt(-10, "needed_solution"), tx); // fail: gap 1, EF 2.50
+      await logAttempt(id, attempt(-8, "easy"), tx); // due, a pass: gap 1, EF 2.60, 1 pass in a row
+
+      const p = await getProblem(id, TODAY, tx);
+      expect(p!.reviewState).toEqual({
+        intervalDays: 1,
+        easeFactor: 2.6,
+        repetitions: 1,
+        nextReview: day(-7),
+        lastReviewed: day(-8),
+        timesReviewed: 2,
+      });
     }));
 
   it("an unsolved problem has no attempts and no review state", () =>
@@ -141,37 +159,35 @@ describe("getProblem", () => {
 });
 
 describe("getDue", () => {
-  it("lists only due problems: not unsolved, not future, not retired", () =>
+  it("lists only due problems: not unsolved, not scheduled for the future", () =>
     withRollback(async (tx) => {
       const before = await getDue({ today: TODAY, limit: 100_000, all: true }, tx);
       const pattern = uniquePattern();
       const unsolved = await makeProblem(tx, { pattern });
       const due = await makeProblem(tx, { pattern });
       const later = await makeProblem(tx, { pattern });
-      const gone = await makeProblem(tx, { pattern });
       await inReviewDue(tx, due);
       await inReviewLater(tx, later);
-      await retired(tx, gone);
 
       const after = await getDue({ today: TODAY, limit: 100_000, all: true }, tx);
-      const ours = after.items.filter((i) => [unsolved, due, later, gone].includes(i.id)).map((i) => i.id);
+      const ours = after.items.filter((i) => [unsolved, due, later].includes(i.id)).map((i) => i.id);
       expect(ours).toEqual([due]);
       expect(after.total).toBe(before.total + 1);
     }));
 
-  it("includes a mastered problem once its 90-day recheck is due", () =>
+  it("includes a mastered problem when its next review comes due (nothing is ever retired)", () =>
     withRollback(async (tx) => {
       const id = await makeProblem(tx);
-      await easyAt(tx, id, -200, -193, -179, -151); // mastered, recheck 90 days after day -151 = day -61
+      await masteredDue(tx, id); // gap 45, next review 32 days ago
       const { items } = await getDue({ today: TODAY, limit: 100_000, all: true }, tx);
       const row = items.find((i) => i.id === id);
-      expect(row).toMatchObject({ status: "mastered", daysOverdue: 61 });
+      expect(row).toMatchObject({ status: "mastered", daysOverdue: 32 });
     }));
 
   it("is due on its review date, and not the day before", () =>
     withRollback(async (tx) => {
       const id = await makeProblem(tx);
-      await easyAt(tx, id, -7); // next review = today
+      await easyAt(tx, id, -1); // gap 1: next review = today
       const onTheDay = await getDue({ today: TODAY, limit: 100_000, all: true }, tx);
       expect(onTheDay.items.find((i) => i.id === id)).toMatchObject({ daysOverdue: 0 });
       const dayBefore = await getDue({ today: day(-1), limit: 100_000, all: true }, tx);
@@ -186,8 +202,8 @@ describe("getDue", () => {
       const hard5 = await makeProblem(tx, { pattern, difficulty: "Hard" });
       const med5 = await makeProblem(tx, { pattern, difficulty: "Medium" });
       const hard2 = await makeProblem(tx, { pattern, difficulty: "Hard" });
-      for (const id of [easy5, hard5, med5]) await easyAt(tx, id, -12); // 7-day interval -> 5 days overdue
-      await easyAt(tx, hard2, -9); // 2 days overdue
+      for (const id of [easy5, hard5, med5]) await easyAt(tx, id, -6); // gap 1 -> 5 days overdue
+      await easyAt(tx, hard2, -3); // 2 days overdue
 
       const { items } = await getDue({ today: TODAY, limit: 100_000, all: true }, tx);
       const ours = items.filter((i) => [easy5, hard5, med5, hard2].includes(i.id)).map((i) => i.id);
@@ -216,7 +232,7 @@ describe("getDue", () => {
       expect(items.find((i) => i.id === id)).toMatchObject({
         title: "Two Sum Test",
         pattern,
-        daysOverdue: 3,
+        daysOverdue: 9,
         insight: "complement in a map",
         url: expect.stringContaining("example.com"),
       });
@@ -224,29 +240,28 @@ describe("getDue", () => {
 });
 
 describe("getProgress", () => {
-  it("counts solved, mastered, retired and due per pattern", () =>
+  it("counts solved, mastered and due per pattern (there is no retired count)", () =>
     withRollback(async (tx) => {
       const pattern = uniquePattern();
       const ids = [];
       for (let i = 0; i < 5; i++) ids.push(await makeProblem(tx, { pattern }));
       // ids[0] stays unsolved
       await inReviewLater(tx, ids[1]);
-      await inReviewDue(tx, ids[2]);
+      await inReviewDue(tx, ids[2]); // due
       await mastered(tx, ids[3]);
-      await retired(tx, ids[4]);
+      await masteredDue(tx, ids[4]); // mastered AND due again
 
       const { patterns } = await getProgress(TODAY, tx);
       expect(patterns.find((p) => p.pattern === pattern)).toEqual({
         pattern,
         total: 5,
         solved: 4,
-        mastered: 1,
-        retired: 1,
-        due: 1,
+        mastered: 2,
+        due: 2,
       });
     }));
 
-  it("totals add up the same way", () =>
+  it("totals add up the same way, with no retired count", () =>
     withRollback(async (tx) => {
       const before = (await getProgress(TODAY, tx)).totals;
       const pattern = uniquePattern();
@@ -260,6 +275,7 @@ describe("getProgress", () => {
       expect(after.solved - before.solved).toBe(2);
       expect(after.mastered - before.mastered).toBe(1);
       expect(after.due - before.due).toBe(1);
+      expect(after).not.toHaveProperty("retired");
     }));
 
   it("counts attempts from the last 7 days (today and the 6 days before)", () =>

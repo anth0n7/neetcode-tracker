@@ -10,14 +10,15 @@ how we work together lives in [CLAUDE.md](CLAUDE.md). Tick boxes as stages land.
 | 1 | Project setup | Done, pushed |
 | 2 | Schema and seed | Done, pushed |
 | 3 | Scheduler (pure rules, 33 tests) | Done, pushed |
-| 4 | API (7 endpoints, same-origin checks) | Done, committed, **not pushed** |
-| — | Verification setup (`npm run check`, isolated test DB, `CLAUDE.md`) | Done, committed, **not pushed** |
-| 5 | Today screen | **Next** |
+| 4 | API (7 endpoints, same-origin checks) | Done, pushed |
+| — | Verification setup (`npm run check`, isolated test DB, `CLAUDE.md`) | Done, pushed |
+| 4b | Switch the scheduler to SM-2 (branch `sm2-scheduler`) | **Done, not committed**: 47 scheduler tests, migrations `0001` and `0002` applied everywhere, API on the new shape, `npm run check` passes |
+| 5 | Today screen | **Next** (waiting for your answers to U1 to U5 below) |
 | 6 | Problems and detail screens | |
 | 7 | Progress screen | |
 | 8 | Real data, polish, running it as an app | |
 
-189 tests pass. The 250-problem list has **not** been fetched yet; the dev database holds
+228 tests pass. The 250-problem list has **not** been fetched yet; the dev database holds
 5 fake fixture problems.
 
 ## How we work (every stage)
@@ -27,40 +28,55 @@ how we work together lives in [CLAUDE.md](CLAUDE.md). Tick boxes as stages land.
 3. **Comments in plain language** in every file, explaining why, not just what.
 4. **`npm run check` must pass** (lint, typecheck, tests). Nothing is "done" without it.
 5. **Check the stage by hand** where the spec says so (curl, browser) and report what I could not verify.
-6. **Commit locally, then wait.** I never push until you approve that commit.
+6. **Git follows `CLAUDE.md`:** work on a branch, and never commit or push unless you ask.
 7. **Finish with the report** from CLAUDE.md: files changed, riskiest part, what was not tested.
 
 ## Decisions needed before Stage 5
 
+(Numbered U1 to U5, for "UI", so they are not confused with the spec's SM-2 decisions D1 to D9.)
+
 These touch dependencies or visible behaviour, so they are yours to make.
 
-**D1. How do we test the screens?** Today is the first screen with real interaction.
+**U1. How do we test the screens?** Today is the first screen with real interaction.
 - **(a) Recommended: pure logic + a real browser look.** Keep the screen's behaviour (remove a row, undo, counts) in plain functions tested with Vitest, add no dependencies, and check the page in a real browser by hand.
   Cheapest, but the React wiring itself is only covered by hand.
 - (b) Add `@testing-library/react` + `jsdom` (two dev dependencies) to test components in Vitest.
 - (c) Add Playwright (heavier) for true end-to-end tests of the running app.
 
-**D2. How should the Today list update?**
+**U2. How should the Today list update?**
 - **(a) Recommended:** the page loads the due list on the server, a small client component handles clicks, and after a rating the row disappears at once (calling the API in the background and putting it back with an error message if it fails).
 - (b) Wait for the server before removing the row (simpler, feels slower).
 
-**D3. Look and feel.** I'd use Tailwind, follow your system light/dark setting, keep it plain and fast (one screen, big rating buttons, keyboard shortcuts `1`/`2`/`3`). Say if you want something different.
+**U3. Look and feel.** I'd use Tailwind, follow your system light/dark setting, keep it plain and fast (one screen, big rating buttons, keyboard shortcuts `1`/`2`/`3`). Say if you want something different.
 
-**D4. When to fetch the real 250 list?** The spec leaves it to Stage 8.
+**U4. When to fetch the real 250 list?** The spec leaves it to Stage 8.
 - **Recommended: right after Stage 5** (a short Stage 5b), so Stages 6 and 7 are built and checked against real data (patterns, ordering, search) and not 5 fake problems.
 
-**D5. Should `npm run check` also run `next build`?** It would catch problems the other three miss (route and page compile errors) but adds about 10 seconds. Recommended: yes, once screens exist.
+**U5. Should `npm run check` also run `next build`?** It would catch problems the other three miss (route and page compile errors) but adds about 10 seconds. Recommended: yes, once screens exist.
+
+## Stage 4b: Switch the scheduler to SM-2 (done, on branch `sm2-scheduler`, not committed)
+
+The spec ([docs/SPEC.md](docs/SPEC.md), "Scheduling rules (SM-2)") records every decision (D1 to D9 *in the spec*) and all are confirmed and implemented. Goal was to stay as close to the original SM-2 as possible; the places where we differ are listed in the spec under "How this differs from the original SM-2".
+
+Each step went test-first:
+1. **Scheduler tests** (`tests/scheduler.test.ts`): 47 tests, run against the old scheduler first (36 failed for the right reasons).
+2. **`lib/scheduler.ts`** rewritten: 47 of 47 pass; 8 deliberate rule breaks were all caught.
+3. **Migrations** `0001` (add `ease_factor` and `repetitions`, drop `status`, make `next_review` required) and `0002` (check constraints `ease_factor >= 130`, `repetitions >= 0`), applied to the test, dev and real databases (all `review_state` tables were empty). `0000` was never edited.
+4. **`lib/attempts.ts`, `lib/queries.ts`, `lib/validate.ts`, the routes**, plus a new `lib/api-shape.ts` that shows the ease factor as a decimal; `status=retired` is now a 400 and progress has no `retired` count.
+5. **Other tests** (`attempts`, `queries`, `routes`, `test-database`, `validate`, new `schema` and `api-shape`) updated or added, with dates recomputed from the new worked example.
+6. **Verified:** `npm run check` passes (lint, typecheck, 228 tests); six deliberate breaks of the API and query logic were all caught; the curl check against a production build on the dev database matched the spec's worked example line by line (including an early Easy, a same-day repeat, undo, and a failure on a mastered problem); dev and real databases were left clean.
+7. **Docs:** the spec's DRAFT banner is gone and its decisions are marked confirmed; this plan is updated.
 
 ## Stage 5: Today screen (`/`)
 
 Build: the due list with title (linked out), pattern, days overdue, and the saved insight hidden behind **Reveal**; three rating buttons per row that log today's attempt in one click; header with due count and solved count (e.g. `42 / 250`); **Undo** toast (about 5 seconds) that deletes the attempt just logged; "Show all" beyond 10; empty state ("Nothing due today").
 
-Tests first (adjusted by D1): the list state logic: rating removes a row and updates counts, Undo puts it back in order, a failed request restores the row, "Show all" toggles the limit.
+Tests first (adjusted by U1): the list state logic: rating removes a row and updates counts, Undo puts it back in order, a failed request restores the row, "Show all" toggles the limit.
 Also: a thin check that the page's data call matches `GET /api/review/due`.
 
 Check: rate a problem and watch it leave the list with a new date; Undo brings it back; a rating takes under 10 seconds from opening the app.
 
-## Stage 5b: Real data (if D4 is accepted)
+## Stage 5b: Real data (if U4 is accepted)
 
 Build `scripts/fetch-neetcode250.ts`, a one-time pull from neetcode.io into `data/neetcode250.json`, and print a summary for **your** review: total, count per pattern, a few random entries. Nothing is written from memory. If neetcode.io blocks the pull, you paste the list instead.
 Seed it into the real database only after you've approved the summary.
@@ -70,7 +86,7 @@ Check: `npm run seed` loads 250; running it twice still gives 250; insights surv
 
 ## Stage 6: Problems and detail (`/problems`, `/problems/[id]`)
 
-- **Problems:** all problems, filters for pattern, difficulty and status (unsolved, in review, mastered, retired), title search, link out. Filters live in the URL so a filtered view can be bookmarked.
+- **Problems:** all problems, filters for pattern, difficulty and status (unsolved, in review, mastered), title search, link out. Filters live in the URL so a filtered view can be bookmarked.
 - **Detail:** problem info, current schedule, editable insight, attempt history with a delete button per row, and the log form (rating, optional minutes, insight, optional date). The form warns before an Easy that won't count ("Not due until Nov 20, so an Easy won't change the schedule").
 
 Tests first: the early-Easy warning rule (a pure function using the scheduler), filter parsing from the URL, history delete restoring state (already covered by the API tests).
@@ -78,7 +94,7 @@ Check: filters combine correctly; deleting the only attempt makes the problem un
 
 ## Stage 7: Progress (`/progress`)
 
-Per-pattern bars (solved, mastered, retired, due), the last-7-days attempt count, overall totals.
+Per-pattern bars (solved, mastered, due), the last-7-days attempt count, overall totals.
 
 Tests first: totals on this screen equal the Problems screen's counts for the same data (one shared query, so they cannot drift).
 Check: totals match the Problems screen with real data.
@@ -108,10 +124,10 @@ From the spec's acceptance checklist:
 
 - **Time zones and "today".** Everything uses the local calendar date at midnight. The scheduler never reads the clock, so every date rule is testable.
 - **Next.js 16 differences.** `AGENTS.md` says this version differs from what I know, so I read the bundled docs in `node_modules/next/dist/docs/` before writing routes or pages.
-- **The UI is the least-tested layer** unless we pick D1 (b) or (c).
+- **The UI is the least-tested layer** unless we pick U1 (b) or (c).
 - **Public repo.** No personal data, no `.env` files; commits use the GitHub noreply email.
-- **Unpushed work.** Stage 4 and the verification setup are committed but waiting for your push approval.
+- **Uncommitted work.** The SM-2 work (about 20 files) is on branch `sm2-scheduler` and not committed; Stages 1 to 4 and the verification setup are pushed to `main`.
 
 ## Not in v1
 
-Accounts or sync, notifications, importing progress from NeetCode or LeetCode, fancier scheduling (SM-2), an in-app code editor, editing attempts (delete and re-log instead).
+Accounts or sync, notifications, importing progress from NeetCode or LeetCode, scheduling beyond SM-2, an in-app code editor, editing attempts (delete and re-log instead).

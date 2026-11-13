@@ -64,10 +64,13 @@ describe("POST /api/problems/:id/attempts", () => {
     const r = await log(SPARE, { rating: "needed_solution", minutes: 12, insight: "think about order" });
     expect(r.status).toBe(201);
     expect(r.body.attemptId).toBeGreaterThan(0);
-    expect(r.body.reviewState).toMatchObject({
-      intervalDays: 2,
-      nextReview: addDays(TODAY, 2),
-      status: "in_review",
+    // A first-ever failure: gap of 1 day, no passes in a row, ease factor 2.5 (shown as a decimal).
+    expect(r.body.reviewState).toEqual({
+      intervalDays: 1,
+      easeFactor: 2.5,
+      repetitions: 0,
+      nextReview: addDays(TODAY, 1),
+      lastReviewed: TODAY,
       timesReviewed: 1,
     });
     const d = await detail(SPARE);
@@ -116,17 +119,23 @@ describe("POST /api/problems/:id/attempts", () => {
 
 describe("the full flow: log, review, undo", () => {
   it("applies the scheduling rules and undo restores the previous state", async () => {
-    // 10 days ago: Easy -> interval 7, next review 3 days ago, so it is due now.
+    // 10 days ago: Easy -> gap 1 day, next review 9 days ago, so it is due now.
     const first = await log(FLOW, { rating: "easy", attempted_on: ago(10) });
-    expect(first.body.reviewState).toMatchObject({ intervalDays: 7, nextReview: ago(3) });
+    expect(first.body.reviewState).toMatchObject({ intervalDays: 1, easeFactor: 2.6, nextReview: ago(9) });
 
-    // It shows up as due with 3 days overdue.
+    // It shows up as due with 9 days overdue.
     const due1 = await call(getDue as Handler, "GET", "/api/review/due?all=true");
-    expect(due1.body.items.find((i: { id: number }) => i.id === FLOW)).toMatchObject({ daysOverdue: 3, difficulty: "Hard" });
+    expect(due1.body.items.find((i: { id: number }) => i.id === FLOW)).toMatchObject({ daysOverdue: 9, difficulty: "Hard" });
 
-    // Rate it Easy today: due, so it counts -> 14 days.
+    // Rate it Easy today: due, so it counts -> second pass in a row: gap 6, ease factor 2.7.
     const second = await log(FLOW, { rating: "easy" });
-    expect(second.body.reviewState).toMatchObject({ intervalDays: 14, nextReview: addDays(TODAY, 14), timesReviewed: 2 });
+    expect(second.body.reviewState).toMatchObject({
+      intervalDays: 6,
+      easeFactor: 2.7,
+      repetitions: 2,
+      nextReview: addDays(TODAY, 6),
+      timesReviewed: 2,
+    });
 
     // It has left the due list.
     const due2 = await call(getDue as Handler, "GET", "/api/review/due?all=true");
@@ -135,7 +144,7 @@ describe("the full flow: log, review, undo", () => {
     // Undo: back to the first attempt's schedule, and it is due again.
     const undone = await remove(FLOW, second.body.attemptId);
     expect(undone.status).toBe(200);
-    expect(undone.body.reviewState).toMatchObject({ intervalDays: 7, nextReview: ago(3), timesReviewed: 1 });
+    expect(undone.body.reviewState).toMatchObject({ intervalDays: 1, easeFactor: 2.6, nextReview: ago(9), timesReviewed: 1 });
     const due3 = await call(getDue as Handler, "GET", "/api/review/due?all=true");
     expect(due3.body.items.find((i: { id: number }) => i.id === FLOW)).toBeDefined();
 
@@ -146,11 +155,33 @@ describe("the full flow: log, review, undo", () => {
   });
 
   it("an early Easy is logged but does not move the schedule", async () => {
-    const first = await log(FLOW, { rating: "easy" }); // next review in 7 days
-    const early = await log(FLOW, { rating: "easy" }); // same day, so not due yet
-    expect(early.body.reviewState).toMatchObject({ intervalDays: 7, nextReview: addDays(TODAY, 7), timesReviewed: 2 });
-    await remove(FLOW, early.body.attemptId);
-    await remove(FLOW, first.body.attemptId);
+    await log(FLOW, { rating: "easy", attempted_on: ago(5) }); // gap 1, due 4 days ago
+    await log(FLOW, { rating: "easy", attempted_on: ago(4) }); // due, counts: gap 6, next review 2 days from now
+    const early = await log(FLOW, { rating: "easy" }); // today is before that: early
+    expect(early.body.reviewState).toMatchObject({
+      intervalDays: 6,
+      easeFactor: 2.7,
+      nextReview: addDays(TODAY, 2),
+      timesReviewed: 3,
+    });
+  });
+
+  it("a second attempt on the same day is logged but changes nothing, even a failure", async () => {
+    const first = await log(FLOW, { rating: "easy" });
+    const repeat = await log(FLOW, { rating: "needed_solution" });
+    expect(repeat.status).toBe(201);
+    expect(repeat.body.reviewState).toMatchObject({
+      intervalDays: 1,
+      easeFactor: 2.6,
+      repetitions: 1,
+      nextReview: addDays(TODAY, 1),
+      timesReviewed: 2,
+    });
+    expect((await detail(FLOW)).body.attempts).toHaveLength(2);
+
+    // Undo the first attempt of the day: the repeat now counts.
+    const undone = await remove(FLOW, first.body.attemptId);
+    expect(undone.body.reviewState).toMatchObject({ repetitions: 0, easeFactor: 2.5, timesReviewed: 1 });
   });
 });
 
@@ -196,6 +227,20 @@ describe("GET /api/problems/:id", () => {
     expect((await detail("abc")).status).toBe(404);
   });
 
+  it("shows the schedule with a decimal ease factor, repetitions and no status", async () => {
+    await log(OTHER, { rating: "easy" });
+    const r = await detail(OTHER);
+    expect(r.body.reviewState).toEqual({
+      intervalDays: 1,
+      easeFactor: 2.6,
+      repetitions: 1,
+      nextReview: addDays(TODAY, 1),
+      lastReviewed: TODAY,
+      timesReviewed: 1,
+    });
+    expect(r.body.reviewState).not.toHaveProperty("status");
+  });
+
   it("returns the problem for a known id", async () => {
     const r = await detail(OTHER);
     expect(r.status).toBe(200);
@@ -207,7 +252,7 @@ describe("GET /api/problems", () => {
   const list = (qs: string) => call(listProblems as Handler, "GET", `/api/problems?${qs}`);
   const ids = (r: { body: { id: number }[] }) => r.body.map((p) => p.id);
 
-  // Every test here expects SPARE to be "in review" (due in 2 days) and the
+  // Every test here expects SPARE to be "in review" (due tomorrow) and the
   // other two problems to be unsolved. The database is empty at the start of
   // each test, so set that up explicitly.
   beforeEach(async () => {
@@ -227,12 +272,13 @@ describe("GET /api/problems", () => {
 
   it("includes status and next review", async () => {
     const r = await list(`pattern=${encodeURIComponent(PATTERN)}&q=spare`);
-    expect(r.body[0]).toMatchObject({ status: "in review", nextReview: addDays(TODAY, 2), due: false });
+    expect(r.body[0]).toMatchObject({ status: "in review", nextReview: addDays(TODAY, 1), due: false });
   });
 
   it("rejects an unknown difficulty or status with 400", async () => {
     expect((await list("difficulty=Brutal")).status).toBe(400);
     expect((await list("status=done")).status).toBe(400);
+    expect((await list("status=retired")).status).toBe(400); // SM-2 never retires a problem
   });
 });
 
@@ -271,7 +317,6 @@ describe("GET /api/progress", () => {
       total: 3,
       solved: 1, // SPARE
       mastered: 0,
-      retired: 0,
       due: 0,
     });
   });
