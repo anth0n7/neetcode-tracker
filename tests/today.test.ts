@@ -1,9 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { todayLocal } from "@/lib/today";
 
-// `new Date(y, m, d, h, min)` builds a moment in the computer's LOCAL time zone
-// (months count from 0), which is exactly what todayLocal() reads, so these
-// tests give the same answer in any time zone.
 describe("todayLocal", () => {
   it("formats as YYYY-MM-DD", () => {
     expect(todayLocal(new Date(2026, 10, 12, 9, 30))).toBe("2026-11-12");

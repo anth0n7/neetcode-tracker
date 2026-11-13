@@ -1,7 +1,3 @@
-// Tests for the API routes, called the way Next.js calls them: with a Request in,
-// a Response out. They use the TEST database (see tests/test-db.ts). Routes can't
-// be rolled back, so instead every test starts from an empty database (wiped by
-// tests/setup-db.ts) and creates the three problems it needs in beforeEach.
 import { beforeEach, describe, expect, it } from "vitest";
 import { GET as listProblems } from "@/app/api/problems/route";
 import { GET as getProblem } from "@/app/api/problems/[id]/route";
@@ -17,13 +13,11 @@ import { todayLocal } from "@/lib/today";
 
 const TODAY = todayLocal();
 const PATTERN = `T-API-${Date.now()}`;
-// Three throwaway problems: one for the main flow, one for list/filter tests, one for error cases.
 const FLOW = 995_001;
 const OTHER = 995_002;
 const SPARE = 995_003;
 const IDS = [FLOW, OTHER, SPARE];
 
-// Runs after the reset in tests/setup-db.ts, so these are the only rows in the database.
 beforeEach(async () => {
   await db.insert(problems).values([
     { id: FLOW, position: 995_001, title: "API Flow Problem", slug: "t-api-flow", url: "https://example.com/flow", pattern: PATTERN, difficulty: "Hard" },
@@ -31,8 +25,6 @@ beforeEach(async () => {
     { id: SPARE, position: 995_003, title: "API Spare Problem", slug: "t-api-spare", url: "https://example.com/spare", pattern: PATTERN, difficulty: "Medium" },
   ]);
 });
-
-// --- helpers to call a route handler like Next would ---
 
 type Handler = (request: Request, ctx: { params: Promise<Record<string, string>> }) => Promise<Response>;
 type CallOptions = { body?: unknown; rawBody?: string; headers?: Record<string, string>; params?: Record<string, string> };
@@ -64,7 +56,6 @@ describe("POST /api/problems/:id/attempts", () => {
     const r = await log(SPARE, { rating: "needed_solution", minutes: 12, insight: "think about order" });
     expect(r.status).toBe(201);
     expect(r.body.attemptId).toBeGreaterThan(0);
-    // A first-ever failure: gap of 1 day, no passes in a row, ease factor 2.5 (shown as a decimal).
     expect(r.body.reviewState).toEqual({
       intervalDays: 1,
       easeFactor: 2.5,
@@ -119,15 +110,12 @@ describe("POST /api/problems/:id/attempts", () => {
 
 describe("the full flow: log, review, undo", () => {
   it("applies the scheduling rules and undo restores the previous state", async () => {
-    // 10 days ago: Easy -> gap 1 day, next review 9 days ago, so it is due now.
     const first = await log(FLOW, { rating: "easy", attempted_on: ago(10) });
     expect(first.body.reviewState).toMatchObject({ intervalDays: 1, easeFactor: 2.6, nextReview: ago(9) });
 
-    // It shows up as due with 9 days overdue.
     const due1 = await call(getDue as Handler, "GET", "/api/review/due?all=true");
     expect(due1.body.items.find((i: { id: number }) => i.id === FLOW)).toMatchObject({ daysOverdue: 9, difficulty: "Hard" });
 
-    // Rate it Easy today: due, so it counts -> second pass in a row: gap 6, ease factor 2.7.
     const second = await log(FLOW, { rating: "easy" });
     expect(second.body.reviewState).toMatchObject({
       intervalDays: 6,
@@ -137,27 +125,24 @@ describe("the full flow: log, review, undo", () => {
       timesReviewed: 2,
     });
 
-    // It has left the due list.
     const due2 = await call(getDue as Handler, "GET", "/api/review/due?all=true");
     expect(due2.body.items.find((i: { id: number }) => i.id === FLOW)).toBeUndefined();
 
-    // Undo: back to the first attempt's schedule, and it is due again.
     const undone = await remove(FLOW, second.body.attemptId);
     expect(undone.status).toBe(200);
     expect(undone.body.reviewState).toMatchObject({ intervalDays: 1, easeFactor: 2.6, nextReview: ago(9), timesReviewed: 1 });
     const due3 = await call(getDue as Handler, "GET", "/api/review/due?all=true");
     expect(due3.body.items.find((i: { id: number }) => i.id === FLOW)).toBeDefined();
 
-    // Deleting the only attempt makes the problem unsolved again.
     const last = await remove(FLOW, first.body.attemptId);
     expect(last.body.reviewState).toBeNull();
     expect((await detail(FLOW)).body).toMatchObject({ status: "unsolved", attempts: [], reviewState: null });
   });
 
   it("an early Easy is logged but does not move the schedule", async () => {
-    await log(FLOW, { rating: "easy", attempted_on: ago(5) }); // gap 1, due 4 days ago
-    await log(FLOW, { rating: "easy", attempted_on: ago(4) }); // due, counts: gap 6, next review 2 days from now
-    const early = await log(FLOW, { rating: "easy" }); // today is before that: early
+    await log(FLOW, { rating: "easy", attempted_on: ago(5) });
+    await log(FLOW, { rating: "easy", attempted_on: ago(4) });
+    const early = await log(FLOW, { rating: "easy" });
     expect(early.body.reviewState).toMatchObject({
       intervalDays: 6,
       easeFactor: 2.7,
@@ -179,7 +164,6 @@ describe("the full flow: log, review, undo", () => {
     });
     expect((await detail(FLOW)).body.attempts).toHaveLength(2);
 
-    // Undo the first attempt of the day: the repeat now counts.
     const undone = await remove(FLOW, first.body.attemptId);
     expect(undone.body.reviewState).toMatchObject({ repetitions: 0, easeFactor: 2.5, timesReviewed: 1 });
   });
@@ -189,10 +173,9 @@ describe("DELETE /api/problems/:id/attempts/:attemptId", () => {
   it("returns 404 for an unknown attempt, an attempt of another problem, or bad ids", async () => {
     const mine = await log(OTHER, { rating: "easy" });
     expect((await remove(OTHER, 123_456_789)).status).toBe(404);
-    expect((await remove(SPARE, mine.body.attemptId)).status).toBe(404); // belongs to OTHER
+    expect((await remove(SPARE, mine.body.attemptId)).status).toBe(404);
     expect((await remove(OTHER, "abc")).status).toBe(404);
     expect((await remove("abc", 1)).status).toBe(404);
-    // the attempt is still there
     expect((await detail(OTHER)).body.attempts).toHaveLength(1);
     await remove(OTHER, mine.body.attemptId);
   });
@@ -252,9 +235,6 @@ describe("GET /api/problems", () => {
   const list = (qs: string) => call(listProblems as Handler, "GET", `/api/problems?${qs}`);
   const ids = (r: { body: { id: number }[] }) => r.body.map((p) => p.id);
 
-  // Every test here expects SPARE to be "in review" (due tomorrow) and the
-  // other two problems to be unsolved. The database is empty at the start of
-  // each test, so set that up explicitly.
   beforeEach(async () => {
     await log(SPARE, { rating: "needed_solution" });
   });
@@ -264,7 +244,7 @@ describe("GET /api/problems", () => {
     expect(ids(await list(`pattern=${p}`))).toEqual(IDS);
     expect(ids(await list(`pattern=${p}&difficulty=Hard`))).toEqual([FLOW]);
     expect(ids(await list(`pattern=${p}&q=spare`))).toEqual([SPARE]);
-    expect(ids(await list(`pattern=${p}&status=unsolved`))).toEqual([FLOW, OTHER]); // SPARE was attempted in beforeEach
+    expect(ids(await list(`pattern=${p}&status=unsolved`))).toEqual([FLOW, OTHER]);
     expect(ids(await list(`pattern=${p}&status=in review`))).toEqual([SPARE]);
     expect(ids(await list(`pattern=${p}&difficulty=Medium&status=in review&q=API`))).toEqual([SPARE]);
     expect(ids(await list(`pattern=${p}&difficulty=Easy&status=in review`))).toEqual([]);
@@ -278,7 +258,7 @@ describe("GET /api/problems", () => {
   it("rejects an unknown difficulty or status with 400", async () => {
     expect((await list("difficulty=Brutal")).status).toBe(400);
     expect((await list("status=done")).status).toBe(400);
-    expect((await list("status=retired")).status).toBe(400); // SM-2 never retires a problem
+    expect((await list("status=retired")).status).toBe(400);
   });
 });
 
@@ -308,14 +288,14 @@ describe("GET /api/review/due", () => {
 
 describe("GET /api/progress", () => {
   it("returns totals and per-pattern counts", async () => {
-    await log(SPARE, { rating: "needed_solution" }); // makes exactly one of the three problems solved
+    await log(SPARE, { rating: "needed_solution" });
     const r = await call(getProgress as Handler, "GET", "/api/progress");
     expect(r.status).toBe(200);
     expect(r.body.totals).toMatchObject({ problems: expect.any(Number), attemptsLast7Days: expect.any(Number) });
     expect(r.body.patterns.find((p: { pattern: string }) => p.pattern === PATTERN)).toEqual({
       pattern: PATTERN,
       total: 3,
-      solved: 1, // SPARE
+      solved: 1,
       mastered: 0,
       due: 0,
     });

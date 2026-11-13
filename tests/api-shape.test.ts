@@ -1,6 +1,3 @@
-// Tests for lib/api-shape.ts: how a schedule is shown to API clients.
-// Inside the app the ease factor is a whole number of hundredths (250); the API
-// shows it as the decimal people expect (2.5).
 import { describe, expect, it } from "vitest";
 import { reviewStateToApi } from "@/lib/api-shape";
 import type { ReviewState } from "@/lib/scheduler";

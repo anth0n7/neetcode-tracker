@@ -1,14 +1,8 @@
-// Tests for the shape of the review_state table after the switch to SM-2.
-//
-// They look at the real test database (after tests/global-setup.ts has applied
-// every migration in /drizzle), so they prove the migrations produce the table the
-// spec describes, not just that the TypeScript schema file says so.
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { problems, reviewState } from "@/db/schema";
 import { db } from "@/lib/db";
 
-// One row per column of review_state: its name, type and whether NULL is allowed.
 async function reviewStateColumns() {
   const { rows } = await db.execute(sql`
     select column_name as name, data_type as type, is_nullable as nullable
@@ -66,8 +60,6 @@ describe("review_state after the SM-2 migration", () => {
     await db.insert(problems).values({
       id: 1, position: 1, title: "T", slug: "t", url: "https://example.com", pattern: "P", difficulty: "Easy",
     });
-    // Drizzle wraps Postgres errors: the top-level message is "Failed query: ...",
-    // and Postgres's own message (what we want to check) is in `cause`.
     const error = await db
       .execute(
         sql`insert into review_state (problem_id, interval_days, ease_factor, repetitions, last_reviewed, times_reviewed)
@@ -78,10 +70,7 @@ describe("review_state after the SM-2 migration", () => {
   });
 });
 
-// Hard limits from the spec that the database itself enforces, as a safety net in
-// case code ever writes a bad schedule.
 describe("review_state value checks", () => {
-  // Try to save a schedule with these two numbers; return the error (or null if it saved).
   async function tryInsert(o: { easeFactor: number; repetitions: number }) {
     await db.insert(problems).values({
       id: 1, position: 1, title: "T", slug: "t", url: "https://example.com", pattern: "P", difficulty: "Easy",

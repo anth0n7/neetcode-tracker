@@ -1,6 +1,3 @@
-// Tests for the guard in tests/test-db.ts. The guard is the last line of defence
-// that stops the test suite from ever connecting to the dev or real database,
-// so it must accept exactly one database and reject everything else.
 import { describe, expect, it } from "vitest";
 import { assertTestDatabaseUrl, TEST_DATABASE_URL } from "./test-db";
 

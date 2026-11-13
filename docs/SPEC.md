@@ -1,4 +1,4 @@
-# NeetCode 250 Tracker – Build Spec
+# NeetCode 250 Tracker build spec
 
 A single-user web app that tracks the NeetCode 250 problem list and shows each day which solved problems to review again.
 
@@ -56,22 +56,22 @@ A single-user web app that tracks the NeetCode 250 problem list and shows each d
 | `neetcode_tracker` | `.env.local` | `npm start`, `npm run deploy`, `npm run seed` | `data/neetcode250.json` only |
 | `neetcode_tracker_dev` | `.env.development.local` | `npm run dev`, `npm run db:migrate:dev`, `npm run seed:dev` | `data/fixture.json` |
 
-Next.js loads `.env.development.local` over `.env.local` under `next dev`. Scripts run outside Next (seed, Drizzle migrations) load the env file explicitly via `@next/env`'s `loadEnvConfig(dir, dev)`, so `seed:dev` / `db:migrate:dev` pass `dev = true`. `seed.ts` refuses to load `fixture.json` unless the target database name ends in `_dev` or `_test` (the automated tests' database), so fixture rows can never reach the real database.
+Next.js loads `.env.development.local` over `.env.local` under `next dev`. Scripts that run outside Next (seed, Drizzle migrations) load the env file explicitly with `@next/env`'s `loadEnvConfig(dir, dev)`, so `seed:dev` and `db:migrate:dev` pass `dev = true`. `seed.ts` refuses to load `fixture.json` unless the target database name ends in `_dev` or `_test` (the automated tests' database), so fixture rows can never reach the real database.
 
 ### Steps
 
-1. **One-time setup.** `createdb neetcode_tracker` and `createdb neetcode_tracker_dev`; put `DATABASE_URL=postgres://localhost:5432/neetcode_tracker` in `.env.local` and `DATABASE_URL=postgres://localhost:5432/neetcode_tracker_dev` in `.env.development.local`; run migrations on both; `npm run seed:dev` (fixture). The real database is seeded only once the real list exists.
+1. **One-time setup.** Run `createdb neetcode_tracker` and `createdb neetcode_tracker_dev`. Put `DATABASE_URL=postgres://localhost:5432/neetcode_tracker` in `.env.local` and `DATABASE_URL=postgres://localhost:5432/neetcode_tracker_dev` in `.env.development.local`. Run migrations on both, then `npm run seed:dev` (fixture). Seed the real database only once the real list exists.
 2. **Development.** `npm run dev` runs `next dev -p 3001 -H 127.0.0.1`, so it never collides with the always-running app on 3000.
 3. **Deploy.** `npm run deploy` runs migrations on the real database, `next build`, then `launchctl kickstart -k gui/$UID/<label>` to restart the agent.
-4. **Auto-start.** `scripts/install-launchd.sh` writes a LaunchAgent into `~/Library/LaunchAgents` that runs `npm start` at login with `KeepAlive`. It uses absolute paths (`/usr/local/bin/node`, project dir) because launchd does not load the shell profile. Logs go to `~/Library/Logs/neetcode-tracker/`. Postgres is already a Homebrew launchd service, so it is up at login.
-5. **Localhost only.** `npm start` runs `next start -p 3000 -H 127.0.0.1` (the agent calls `npm start`, so it inherits this). `next start` otherwise listens on all interfaces, and the app has no login and has delete endpoints, so anyone on the same network could change the data.
+4. **Auto-start.** `scripts/install-launchd.sh` writes a LaunchAgent into `~/Library/LaunchAgents` that runs `npm start` at login with `KeepAlive`. It uses absolute paths (`/usr/local/bin/node` and the project directory) because launchd does not load the shell profile. Logs go to `~/Library/Logs/neetcode-tracker/`. Postgres is already a Homebrew launchd service, so it is up at login.
+5. **Localhost only.** `npm start` runs `next start -p 3000 -H 127.0.0.1` (the agent calls `npm start`, so it inherits this). Without that flag, `next start` listens on all interfaces. The app has no login and has delete endpoints, so anyone on the same network could change the data.
 6. **App feel.** A web app manifest and icon, so Chrome's *Install app* or Safari's *Add to Dock* opens it in its own window.
 
 ---
 
 ## Data model
 
-### `problems` (seed fields + one user field)
+### `problems` (seed fields and one user field)
 
 | Field | Type | Notes |
 |---|---|---|
@@ -91,7 +91,7 @@ The seed upsert writes only the seed fields; it never touches `insight`.
 | Field | Type | Notes |
 |---|---|---|
 | id | integer PK | |
-| problem_id | integer FK → problems.id | |
+| problem_id | integer FK to problems.id | |
 | attempted_on | date | Defaults to today; never in the future |
 | rating | text | `easy`, `struggled`, `needed_solution` |
 | minutes | integer, nullable | Optional timer value |
@@ -109,9 +109,9 @@ The seed upsert writes only the seed fields; it never touches `insight`.
 | last_reviewed | date | Date of the latest attempt |
 | times_reviewed | integer | Count of all attempts, including early ones |
 
-`review_state` is a **derived cache**: it is always the output of `replay()` over the problem's attempts (see below). It is never updated incrementally.
+`review_state` is a derived cache. It is always the output of `replay()` over the problem's attempts (see below) and is never updated incrementally.
 
-There is no `status` column: the status is worked out from the row (see below), so there is one source of truth. The database itself enforces `ease_factor >= 130` and `repetitions >= 0` (check constraints), as a safety net in case code ever writes a bad schedule.
+There is no `status` column. The status is worked out from the row (see below), so there is one source of truth. The database itself enforces `ease_factor >= 130` and `repetitions >= 0` (check constraints), as a safety net in case code ever writes a bad schedule.
 
 The ease factor is stored as a whole number of hundredths so the rounding is exact. With a decimal, 45 x 2.90 could come out as 130.49999 and round the wrong way; with integers it is always exactly 130.5, which rounds up to 131.
 
@@ -129,7 +129,7 @@ The ease factor is stored as a whole number of hundredths so the rounding is exa
 | in review | has a row and `interval_days` is under 28 |
 | mastered | has a row and `interval_days` is 28 or more (still scheduled; it comes back when due) |
 
-"Solved" = any status other than unsolved. There is no "retired" status: SM-2 keeps every problem scheduled, at gaps that keep growing.
+"Solved" = any status other than unsolved. There is no "retired" status. SM-2 keeps every problem scheduled, at gaps that keep growing.
 
 ---
 
@@ -161,7 +161,7 @@ All logic lives in `lib/scheduler.ts`. "Today" is the local calendar date, rolli
 
 ### Decisions
 
-SM-2 (SuperMemo 2) was designed for flashcards graded 0 to 5. Adapting it to three buttons and to coding problems involves choices. All of them are confirmed and implemented; the *Recommended* column is the answer that was chosen. **Goal: stay as close to the original SM-2 as possible**, except where you chose otherwise (D3).
+SM-2 (SuperMemo 2) was designed for flashcards graded 0 to 5. Adapting it to three buttons and to coding problems involves choices. All of them are confirmed and implemented, and the Recommended column holds the answer that was chosen. The goal is to stay as close to the original SM-2 as possible, except where you chose otherwise (D3).
 
 | # | Decision | Recommended | Alternative | Status |
 |---|---|---|---|---|
@@ -200,9 +200,9 @@ A pass is `q >= 3`. Next review is the attempt's date plus the new interval (so 
    - otherwise: `interval = round(prev.interval x prev.EF)`, using the EF from **before** this review, rounded half up
    - then `repetitions + 1`, and the EF is updated: `EF = EF + (0.1 - (5 - q) x (0.08 + (5 - q) x 0.02))`, never below 1.30
 
-In whole hundredths the EF change is `10 - (5 - q) x (8 + (5 - q) x 2)`: **+10** for Easy and **-14** for Struggled.
+In whole hundredths the EF change is `10 - (5 - q) x (8 + (5 - q) x 2)`, which is +10 for Easy and -14 for Struggled.
 
-**Status** (for filters and progress) comes from the row: no row = unsolved; `interval_days < 28` = in review; `interval_days >= 28` = mastered.
+Status (for filters and progress) comes from the row. No row means unsolved, `interval_days < 28` means in review, and `interval_days >= 28` means mastered.
 
 ### How this differs from the original SM-2
 
@@ -218,14 +218,14 @@ The original (Wozniak, 1990) has seven steps. Steps 1 to 6 are implemented as wr
 
 ### Replay
 
-`replay(attempts) -> reviewState | null` sorts attempts by `attempted_on`, then `id`, and folds the rule above over them. No attempts -> `null` (problem is unsolved, the row is deleted).
+`replay(attempts) -> reviewState | null` sorts attempts by `attempted_on`, then `id`, and folds the rule above over them. With no attempts it returns `null`, which means the problem is unsolved and the row is deleted.
 
-Every write (log attempt, delete attempt) runs in one transaction: write the attempt change -> load the problem's attempts -> `replay()` -> upsert or delete `review_state`.
+Every write (log attempt, delete attempt) runs in one transaction. The transaction writes the attempt change, loads the problem's attempts, calls `replay()`, then upserts or deletes the `review_state` row.
 
 ### Due logic
 
 - Due when `next_review <= today`. Every problem with a row is eventually due again.
-- Sort: most overdue first, then Hard -> Medium -> Easy, then list position.
+- Sort: most overdue first, then Hard before Medium before Easy, then list position.
 - Missed days are not rescheduled; the problem shows as overdue.
 - Show at most `DUE_LIMIT` (10) by default, with a "Show all" toggle.
 
@@ -237,7 +237,7 @@ Every write (log attempt, delete attempt) runs in one transaction: write the att
 | 1 | Struggled | 3 | 1 | 1 | 2.36 | Day 2 | pass, EF -0.14 |
 | 2 | Easy | 5 | 2 | 6 | 2.46 | Day 8 | second pass is always 6 days |
 | 8 | Easy | 5 | 3 | 15 | 2.56 | Day 23 | round(6 x 2.46) = 15 |
-| 23 | Easy | 5 | 4 | 38 | 2.66 | Day 61 | round(15 x 2.56) = 38; **mastered** |
+| 23 | Easy | 5 | 4 | 38 | 2.66 | Day 61 | round(15 x 2.56) = 38; mastered |
 | 61 | Easy | 5 | 5 | 101 | 2.76 | Day 162 | round(38 x 2.66) = 101 |
 
 Variations:
@@ -261,7 +261,7 @@ Variations:
 
 ### Behavior
 
-- After a rating on Today, the row leaves the list without a full reload and an **Undo** toast shows for ~5 seconds. Undo deletes that attempt (replay restores the state) and the row returns.
+- After a rating on Today, the row leaves the list without a full reload and an Undo toast shows for about 5 seconds. Undo deletes that attempt (replay restores the state) and the row returns.
 - On the detail form, if Easy is selected and the problem is not due, show: "Not due until <date>, so an Easy rating won't change the schedule."
 - Deleting the only attempt returns the problem to unsolved.
 - Unsolved problems never appear in Today.
@@ -286,14 +286,14 @@ Validation: `rating` must be `easy`, `struggled`, or `needed_solution` (400); a 
 
 ### API details
 
-- **Review state shape (SM-2):** `reviewState` is `{ intervalDays, easeFactor, repetitions, nextReview, lastReviewed, timesReviewed }`. `easeFactor` is shown as a decimal (2.5), though it is stored in hundredths. There is no `status` field; problem rows carry a derived `status` of `unsolved`, `in review` or `mastered`, and the `status` filter accepts those three.
-- **Naming:** request bodies use `attempted_on` (as above); every response uses camelCase (`nextReview`, `intervalDays`, `daysOverdue`, ...).
-- **Responses:** errors are `{ "error": "message" }`. `POST .../attempts` returns `201 { attemptId, reviewState }` (the `attemptId` is what Undo deletes). `DELETE` returns `{ reviewState }` (`null` when the problem went back to unsolved). `PATCH .../insight` returns `{ insight }`. `GET /api/review/due` returns `{ total, items }`, where `total` is the full due count and `items` is cut to the limit. `GET /api/progress` returns `{ totals, patterns }`, with patterns in NeetCode order and `totals.attemptsLast7Days` counting today and the 6 days before.
-- **Bad input:** all fields are checked before the database is touched, so a bad request saves nothing. Malformed or non-numeric ids are 404. `insight` is trimmed, at most 500 characters, and blank means "none"; `PATCH` requires the `insight` field to be present. `minutes` is a whole number from 0 to 1440.
-- **Request safety:** the app has no login, so every route rejects (403) any request whose `Host` is not `localhost`, `127.0.0.1` or `[::1]` (this stops DNS rebinding). Requests that change data (POST, PATCH, DELETE) are also rejected if a browser says they came from another origin (`Origin` differs from `Host`, or `Sec-Fetch-Site` is not `same-origin`/`none`). Requests with no `Origin` (curl, scripts) are allowed.
-- **Concurrency:** logging or deleting an attempt locks the problem's row for the length of its transaction, so two simultaneous requests for one problem take turns.
-- **"Today"** is the local calendar date (`lib/today.ts`), rolling over at midnight. Only the routes call it; the scheduler is always handed the date.
-- **Caching:** `cacheComponents` is switched off in `next.config.ts` so that routes always run fresh. All API routes build as dynamic.
+- **Review state shape.** `reviewState` is `{ intervalDays, easeFactor, repetitions, nextReview, lastReviewed, timesReviewed }`. `easeFactor` is shown as a decimal (2.5), though it is stored in hundredths. There is no `status` field; problem rows carry a derived `status` of `unsolved`, `in review` or `mastered`, and the `status` filter accepts those three.
+- **Naming.** Request bodies use `attempted_on` (as above); every response uses camelCase (`nextReview`, `intervalDays`, `daysOverdue`, ...).
+- **Responses.** Errors are `{ "error": "message" }`. `POST .../attempts` returns `201 { attemptId, reviewState }` (the `attemptId` is what Undo deletes). `DELETE` returns `{ reviewState }` (`null` when the problem went back to unsolved). `PATCH .../insight` returns `{ insight }`. `GET /api/review/due` returns `{ total, items }`, where `total` is the full due count and `items` is cut to the limit. `GET /api/progress` returns `{ totals, patterns }`, with patterns in NeetCode order and `totals.attemptsLast7Days` counting today and the 6 days before.
+- **Bad input.** All fields are checked before the database is touched, so a bad request saves nothing. Malformed or non-numeric ids are 404. `insight` is trimmed, at most 500 characters, and blank means "none"; `PATCH` requires the `insight` field to be present. `minutes` is a whole number from 0 to 1440.
+- **Request safety.** The app has no login, so every route rejects (403) any request whose `Host` is not `localhost`, `127.0.0.1` or `[::1]` (this stops DNS rebinding). Requests that change data (POST, PATCH, DELETE) are also rejected if a browser says they came from another origin (`Origin` differs from `Host`, or `Sec-Fetch-Site` is not `same-origin`/`none`). Requests with no `Origin` (curl, scripts) are allowed.
+- **Concurrency.** Logging or deleting an attempt locks the problem's row for the length of its transaction, so two simultaneous requests for one problem take turns.
+- **Today.** "Today" is the local calendar date (`lib/today.ts`), rolling over at midnight. Only the routes call it; the scheduler is always handed the date.
+- **Caching.** `cacheComponents` is switched off in `next.config.ts`, so routes always run fresh. All API routes build as dynamic.
 
 ---
 
@@ -310,7 +310,7 @@ Explain the plan before each stage; check each before starting the next. Git fol
 7. **Progress.** Per-pattern counts. *Check:* totals match the Problems screen.
 8. **Real data and polish.** Fetch and verify the 250 list, seed it, empty states, errors, `install-launchd.sh`, `npm run deploy`, logging, manifest, README. *Check:* a fresh clone runs by following the README.
 
-**SM-2 switch (done, between stages 4 and 5):** scheduler tests first, then `lib/scheduler.ts`; new migrations `0001` (SM-2 columns) and `0002` (value checks), never editing `0000`; `attempts.ts`, `queries.ts`, validation and the API moved to the new shape; the stage 4 curl check re-run against a production build and matching the worked example. See `plan.md`.
+**SM-2 switch (done, between stages 4 and 5).** Scheduler tests came first, then `lib/scheduler.ts`, then new migrations `0001` (SM-2 columns) and `0002` (value checks), never editing `0000`; `attempts.ts`, `queries.ts`, validation and the API moved to the new shape; the stage 4 curl check re-run against a production build and matching the worked example. See `plan.md`.
 
 ---
 
@@ -318,7 +318,7 @@ Explain the plan before each stage; check each before starting the next. Git fol
 
 ### Scheduler
 
-- First attempt: Easy -> interval 1, repetitions 1, EF 2.60; Struggled -> interval 1, repetitions 1, EF 2.36; Needed solution -> interval 1, repetitions 0, EF 2.50.
+- First attempt: Easy gives interval 1, repetitions 1, EF 2.60. Struggled gives interval 1, repetitions 1, EF 2.36. Needed solution gives interval 1, repetitions 0, EF 2.50.
 - The worked example produces exactly its table, including mastered on day 23.
 - Second pass in a row gives 6 days; later passes give `round(interval x EF)`.
 - Rounding is exact and half rounds up (45 x 2.90 = 131).

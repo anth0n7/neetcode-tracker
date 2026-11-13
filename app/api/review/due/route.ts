@@ -1,6 +1,3 @@
-// GET /api/review/due - the Today screen's list: problems due today or earlier,
-// most overdue first, then Hard before Medium before Easy.
-// Optional: ?limit=N (default 10) and ?all=true. `total` is always the full count.
 import { getDue } from "@/lib/queries";
 import { handle } from "@/lib/route";
 import { todayLocal } from "@/lib/today";

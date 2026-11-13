@@ -10,7 +10,6 @@ import {
   parseRating,
 } from "@/lib/validate";
 
-// Run `fn` and return the HttpError it throws (the test fails if it doesn't throw one).
 function httpError(fn: () => unknown): HttpError {
   try {
     fn();
@@ -28,7 +27,6 @@ describe("parseProblemId", () => {
     expect(parseProblemId("42")).toBe(42);
   });
 
-  // An id that can't be a real problem is treated as "not found" (404), not a bad request.
   it.each(["abc", "0", "-3", "1.5", "", "12abc", " 7"])("rejects %j with 404", (raw) => {
     expect(httpError(() => parseProblemId(raw)).status).toBe(404);
   });
@@ -59,7 +57,6 @@ describe("parseAttemptedOn", () => {
     expect(httpError(() => parseAttemptedOn("2026-11-13", TODAY)).status).toBe(400);
   });
 
-  // The right shape isn't enough: Feb 30 doesn't exist.
   it.each(["11/12/2026", "2026-1-5", "2026-13-01", "2026-02-30", "not a date", 20261112, ""])(
     "rejects %j with 400",
     (raw) => {
@@ -142,7 +139,6 @@ describe("parseProblemFilters", () => {
     expect(httpError(() => parseProblemFilters(new URLSearchParams("status=done"))).status).toBe(400);
   });
 
-  // SM-2 never retires a problem, so "retired" is no longer a status.
   it("rejects the old status 'retired' with 400", () => {
     expect(httpError(() => parseProblemFilters(new URLSearchParams("status=retired"))).status).toBe(400);
   });
