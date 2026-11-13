@@ -18,7 +18,7 @@ and how we work together is in [CLAUDE.md](CLAUDE.md). Tick boxes as stages land
 | 5b | Real data (fetch the 250 list) | Done, merged (PR #2). `data/neetcode250.json` has 250 entries (content and order checked by you) and is seeded into the real database (250 rows, safe to re-run) |
 | 6a | Problems list (branch `stage-6-problems`) | Built and committed. Filters run in the browser through one shared `filterProblems`, mirrored to the URL, bad URL values ignored |
 | 6b | Problem detail | Built, same branch and PR as 6a (separate commit). Insight editor, log form with early-rating warning, history with confirmed delete. Waiting for your browser check on the test database |
-| 6c | Routes and look (same branch, same PR) | Commit 1 done: Problems is the home page, Today moved to `/today`, `/problems` redirects to `/`. Commit 2 (redesign: refined table grouped by pattern with progress bars, shared styles, Today and detail restyled) next |
+| 6c | Routes and look (same branch, same PR) | Done in two commits. Commit 1: Problems is the home page, Today moved to `/today`, `/problems` redirects to `/`. Commit 2: redesign (refined table grouped by pattern with progress bars, shared style tokens, nav, Today and detail restyled). Screenshots checked in headless Chrome (light mode, wide and narrow); dark mode not seen. Waiting for your browser check on the test database |
 | 7 | Progress screen | |
 | 8 | Polish, running it as an app | |
 

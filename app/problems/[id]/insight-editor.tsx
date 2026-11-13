@@ -40,19 +40,19 @@ export function InsightEditor({ problemId, insight }: { problemId: number; insig
           setText(e.target.value);
           setMessage(null);
         }}
-        className="w-full rounded-md border border-zinc-300 bg-transparent px-3 py-2 text-sm dark:border-zinc-700"
+        className="field w-full"
       />
       <div className="mt-2 flex items-center gap-3">
         <button
           type="button"
           onClick={() => void save()}
           disabled={saving || text.trim() === insight.trim()}
-          className="rounded-md border border-zinc-300 px-3 py-2 text-sm font-medium enabled:hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-700 dark:enabled:hover:bg-zinc-900"
+          className="btn"
         >
           Save insight
         </button>
         {message && (
-          <span role="status" className="text-sm text-zinc-600 dark:text-zinc-400">
+          <span role="status" className="text-sm text-muted">
             {message}
           </span>
         )}

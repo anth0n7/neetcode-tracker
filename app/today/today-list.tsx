@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { DifficultyLabel } from "../ui/pills";
 import type { ProblemRow } from "@/lib/queries";
 import {
   attemptRequest,
@@ -87,70 +88,91 @@ export function TodayList({ items, solved, problems }: { items: ProblemRow[]; so
 
   return (
     <main className="mx-auto w-full max-w-2xl px-4 py-8">
-      <header className="mb-6 flex items-baseline justify-between">
-        <h1 className="text-2xl font-semibold">Today</h1>
-        <p className="text-sm text-zinc-600 dark:text-zinc-400">
-          {due} due · {solved} / {problems} solved
+      <header className="mb-6 flex items-end justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">Today</h1>
+          <p className="mt-1 text-sm text-muted">
+            {due === 0 ? "You're all caught up" : `${due} ${due === 1 ? "problem" : "problems"} to review`}
+          </p>
+        </div>
+        <p className="text-sm tabular-nums text-muted">
+          <span className="font-medium text-ink">{solved}</span> / {problems} solved
         </p>
       </header>
 
       {error && (
-        <p role="alert" className="mb-4 rounded border border-red-400 bg-red-50 px-3 py-2 text-sm text-red-800 dark:bg-red-950 dark:text-red-200">
+        <p role="alert" className="mb-4 rounded-lg border border-danger-line bg-danger-soft px-3 py-2 text-sm text-danger">
           {error}
         </p>
       )}
 
       {due === 0 ? (
-        solved === 0 ? (
-          <div className="py-16 text-center text-zinc-600 dark:text-zinc-400">
-            <p>Nothing to review yet.</p>
-            <p className="mt-1">
-              Log your first attempt from the{" "}
-              <Link href="/" className="underline underline-offset-2">
-                Problems page
-              </Link>{" "}
-              and it will come back here when it is due.
-            </p>
-          </div>
-        ) : (
-          <p className="py-16 text-center text-zinc-600 dark:text-zinc-400">Nothing due today</p>
-        )
+        <div className="card px-6 py-14 text-center">
+          {solved === 0 ? (
+            <>
+              <p className="font-medium">Nothing to review yet</p>
+              <p className="mx-auto mt-1 max-w-sm text-sm text-muted">
+                Log your first attempt from the Problems page, and it will come back here when it is due.
+              </p>
+              <Link href="/" className="btn btn-primary mt-5">
+                Browse problems
+              </Link>
+            </>
+          ) : (
+            <>
+              <p className="font-medium">Nothing due today</p>
+              <p className="mt-1 text-sm text-muted">Come back tomorrow, or practice something new.</p>
+              <Link href="/" className="btn mt-5">
+                Browse problems
+              </Link>
+            </>
+          )}
+        </div>
       ) : (
         <ul className="flex flex-col gap-3">
           {rows.map((item) => (
-            <li key={item.id} className="rounded-lg border border-zinc-200 p-4 dark:border-zinc-800">
-              <div className="flex items-baseline justify-between gap-3">
-                <a href={item.url} target="_blank" rel="noreferrer" className="font-medium underline-offset-2 hover:underline">
-                  {item.title}
-                </a>
-                <span className="shrink-0 text-xs text-zinc-600 dark:text-zinc-400">{overdueLabel(item.daysOverdue)}</span>
+            <li key={item.id} className="card p-5">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <Link href={`/problems/${item.id}`} className="font-semibold tracking-tight hover:text-accent">
+                    {item.title}
+                  </Link>{" "}
+                  <a
+                    href={item.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    aria-label={`Open ${item.title} on NeetCode`}
+                    className="text-xs text-muted/60 transition-colors hover:text-accent"
+                  >
+                    ↗
+                  </a>
+                  <p className="mt-1 flex items-center gap-3 text-sm text-muted">
+                    <span>{item.pattern}</span>
+                    <DifficultyLabel difficulty={item.difficulty} />
+                  </p>
+                </div>
+                <span className="shrink-0 rounded-full bg-accent-soft px-2 py-0.5 text-xs font-medium text-accent">
+                  {overdueLabel(item.daysOverdue)}
+                </span>
               </div>
-              <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
-                {item.pattern} · {item.difficulty}
-              </p>
 
               {item.insight &&
                 (revealed.has(item.id) ? (
-                  <p className="mt-3 whitespace-pre-wrap text-sm">{item.insight}</p>
+                  <p className="mt-4 whitespace-pre-wrap rounded-lg bg-subtle px-3 py-2.5 text-sm">{item.insight}</p>
                 ) : (
                   <button
                     type="button"
                     onClick={() => setRevealed((r) => new Set(r).add(item.id))}
-                    className="mt-3 text-sm text-zinc-600 underline underline-offset-2 dark:text-zinc-400"
+                    className="mt-4 text-sm font-medium text-accent hover:underline"
                   >
                     Reveal insight
                   </button>
                 ))}
 
-              <div className="mt-4 grid grid-cols-3 gap-2">
+              <div className="mt-5 grid grid-cols-3 gap-2">
                 {RATING_BUTTONS.map((b) => (
-                  <button
-                    key={b.rating}
-                    type="button"
-                    onClick={() => void rate(item, b.rating)}
-                    className="rounded-md border border-zinc-300 px-3 py-3 text-sm font-medium hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-900"
-                  >
-                    {b.label} <kbd className="ml-1 text-xs text-zinc-500">{b.key}</kbd>
+                  <button key={b.rating} type="button" onClick={() => void rate(item, b.rating)} className="btn py-2.5">
+                    {b.label} <kbd className="kbd">{b.key}</kbd>
                   </button>
                 ))}
               </div>
@@ -160,13 +182,16 @@ export function TodayList({ items, solved, problems }: { items: ProblemRow[]; so
       )}
 
       {!showAll && due > rows.length && (
-        <button type="button" onClick={() => setShowAll(true)} className="mt-4 text-sm underline underline-offset-2">
+        <button type="button" onClick={() => setShowAll(true)} className="mt-4 text-sm font-medium text-accent hover:underline">
           Show all {due}
         </button>
       )}
 
       {toast && (
-        <div role="status" className="fixed bottom-4 left-1/2 flex -translate-x-1/2 items-center gap-4 rounded-lg bg-zinc-900 px-4 py-3 text-sm text-white dark:bg-zinc-100 dark:text-zinc-900">
+        <div
+          role="status"
+          className="fixed bottom-6 left-1/2 flex -translate-x-1/2 items-center gap-4 rounded-xl bg-ink px-4 py-3 text-sm text-canvas shadow-lg"
+        >
           <span>Logged &quot;{toast.title}&quot;</span>
           <button type="button" onClick={() => void undo()} className="font-semibold underline underline-offset-2">
             Undo

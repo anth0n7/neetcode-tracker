@@ -6,7 +6,7 @@ import type { ApiReviewState } from "@/lib/api-shape";
 import { earlyRatingWarning, logAttemptBody } from "@/lib/problem-detail";
 import { RATING_BUTTONS, type Rating } from "@/lib/today-list";
 
-const field = "rounded-md border border-zinc-300 bg-transparent px-3 py-2 text-sm dark:border-zinc-700";
+const field = "field";
 
 export function LogAttemptForm({
   problemId,
@@ -55,16 +55,16 @@ export function LogAttemptForm({
   };
 
   return (
-    <form onSubmit={(e) => void submit(e)} className="flex flex-col gap-3">
+    <form onSubmit={(e) => void submit(e)} className="card flex flex-col gap-4 p-5">
       <fieldset className="grid grid-cols-3 gap-2">
         <legend className="sr-only">Rating</legend>
         {RATING_BUTTONS.map((b) => (
           <label
             key={b.rating}
-            className={`cursor-pointer rounded-md border px-3 py-3 text-center text-sm font-medium has-[:focus-visible]:ring-2 ${
+            className={`cursor-pointer rounded-xl border px-3 py-3 text-center text-sm font-medium transition-colors has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-accent ${
               rating === b.rating
-                ? "border-zinc-900 bg-zinc-100 dark:border-zinc-100 dark:bg-zinc-900"
-                : "border-zinc-300 dark:border-zinc-700"
+                ? "border-accent bg-accent-soft text-accent"
+                : "border-line bg-surface hover:bg-subtle"
             }`}
           >
             <input
@@ -81,7 +81,7 @@ export function LogAttemptForm({
       </fieldset>
 
       {warning && (
-        <p role="status" className="rounded border border-amber-400 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:bg-amber-950 dark:text-amber-100">
+        <p role="status" className="rounded-lg border border-warn-line bg-warn-soft px-3 py-2 text-sm text-warn">
           {warning}
         </p>
       )}
@@ -119,7 +119,7 @@ export function LogAttemptForm({
       </label>
 
       {error && (
-        <p role="alert" className="rounded border border-red-400 bg-red-50 px-3 py-2 text-sm text-red-800 dark:bg-red-950 dark:text-red-200">
+        <p role="alert" className="rounded-lg border border-danger-line bg-danger-soft px-3 py-2 text-sm text-danger">
           {error}
         </p>
       )}
@@ -127,7 +127,7 @@ export function LogAttemptForm({
       <button
         type="submit"
         disabled={!rating || saving}
-        className="self-start rounded-md border border-zinc-300 px-4 py-2 text-sm font-medium enabled:hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-700 dark:enabled:hover:bg-zinc-900"
+        className="btn btn-primary self-start"
       >
         Log attempt
       </button>

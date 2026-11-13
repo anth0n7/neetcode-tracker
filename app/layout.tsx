@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import Link from "next/link";
+import { Nav } from "./ui/nav";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -24,15 +25,18 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">
-        <nav className="mx-auto flex w-full max-w-2xl gap-4 px-4 pt-4 text-sm">
-          <Link href="/" className="font-medium underline-offset-2 hover:underline">
-            Problems
-          </Link>
-          <Link href="/today" className="font-medium underline-offset-2 hover:underline">
-            Today
-          </Link>
-        </nav>
+      <body className="flex min-h-full flex-col">
+        <header className="border-b border-line bg-surface">
+          <div className="mx-auto flex h-14 w-full max-w-5xl items-center justify-between px-4">
+            <Link href="/" className="flex items-center gap-2 font-semibold tracking-tight">
+              <span aria-hidden className="grid size-6 place-items-center rounded-md bg-accent text-xs font-bold text-accent-ink">
+                N
+              </span>
+              NeetCode Tracker
+            </Link>
+            <Nav />
+          </div>
+        </header>
         {children}
       </body>
     </html>

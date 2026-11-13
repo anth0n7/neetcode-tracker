@@ -31,12 +31,12 @@ export function DeleteAttemptButton({ problemId, attemptId }: { problemId: numbe
         type="button"
         onClick={() => void remove()}
         disabled={busy}
-        className="text-xs text-zinc-600 underline underline-offset-2 disabled:opacity-50 dark:text-zinc-400"
+        className="text-xs text-muted transition-colors hover:text-danger disabled:opacity-50"
       >
         Delete
       </button>
       {error && (
-        <p role="alert" className="mt-1 text-xs text-red-700 dark:text-red-300">
+        <p role="alert" className="mt-1 text-xs text-danger">
           {error}
         </p>
       )}
