@@ -6,7 +6,7 @@ A single-user web app that tracks the NeetCode 250 problem list and shows each d
 
 - Mark a problem solved and rate the attempt: **Easy**, **Struggled**, or **Needed solution**.
 - Save a one-line key insight per problem (the idea, not the code).
-- A **Due today** screen driven by a simple spaced-repetition schedule.
+- A **Due today** screen driven by the SM-2 spaced-repetition algorithm.
 - Progress by pattern, so weak areas are visible.
 
 **Done when** the 250 problems are seeded, logging an attempt takes under 10 seconds, and opening the app each morning shows an accurate review list.
@@ -102,13 +102,18 @@ The seed upsert writes only the seed fields; it never touches `insight`.
 | Field | Type | Notes |
 |---|---|---|
 | problem_id | integer PK, FK | |
-| interval_days | integer | Current gap |
-| next_review | date, nullable | `null` only when retired |
+| interval_days | integer | Current gap between reviews, in whole days |
+| ease_factor | integer | SM-2 ease factor in **hundredths** (250 = 2.50); never below 130 |
+| repetitions | integer | Passes in a row since the last failure (SM-2's `n`) |
+| next_review | date | Due when this is today or earlier |
 | last_reviewed | date | Date of the latest attempt |
-| times_reviewed | integer | Count of attempts |
-| status | text | `in_review`, `mastered`, `retired` |
+| times_reviewed | integer | Count of all attempts, including early ones |
 
 `review_state` is a **derived cache**: it is always the output of `replay()` over the problem's attempts (see below). It is never updated incrementally.
+
+There is no `status` column: the status is worked out from the row (see below), so there is one source of truth. The database itself enforces `ease_factor >= 130` and `repetitions >= 0` (check constraints), as a safety net in case code ever writes a bad schedule.
+
+The ease factor is stored as a whole number of hundredths so the rounding is exact. With a decimal, 45 x 2.90 could come out as 130.49999 and round the wrong way; with integers it is always exactly 130.5, which rounds up to 131.
 
 ### Insight rules
 
@@ -121,11 +126,10 @@ The seed upsert writes only the seed fields; it never touches `insight`.
 | Status | Meaning |
 |---|---|
 | unsolved | no `review_state` row |
-| in review | `status = in_review` |
-| mastered | `status = mastered` (passed the 28-day review; waiting on the 90-day recheck) |
-| retired | `status = retired` (passed the 90-day recheck) |
+| in review | has a row and `interval_days` is under 28 |
+| mastered | has a row and `interval_days` is 28 or more (still scheduled; it comes back when due) |
 
-"Solved" = any status other than unsolved.
+"Solved" = any status other than unsolved. There is no "retired" status: SM-2 keeps every problem scheduled, at gaps that keep growing.
 
 ---
 
@@ -151,57 +155,98 @@ The list is never written from memory.
 
 ---
 
-## Scheduling rules
+## Scheduling rules (SM-2)
 
 All logic lives in `lib/scheduler.ts`. "Today" is the local calendar date, rolling over at **midnight**. Dates are `YYYY-MM-DD`.
 
-### Applying one attempt to a state
+### Decisions
 
-Let `prev` be the current state (none for an unsolved problem) and `d` the attempt's `attempted_on`.
+SM-2 (SuperMemo 2) was designed for flashcards graded 0 to 5. Adapting it to three buttons and to coding problems involves choices. All of them are confirmed and implemented; the *Recommended* column is the answer that was chosen. **Goal: stay as close to the original SM-2 as possible**, except where you chose otherwise (D3).
 
-| Rating | Condition | New interval | Status | next_review |
+| # | Decision | Recommended | Alternative | Status |
 |---|---|---|---|---|
-| Needed solution | always | 2 | in_review | d + 2 |
-| Struggled | always | 3 | in_review | d + 3 |
-| Easy | first attempt (no prev) | 7 | in_review | d + 7 |
-| Easy | prev is retired, or `d < prev.next_review` (not due) | unchanged | unchanged | unchanged |
-| Easy | due, prev interval = 90 | 90 | **retired** | `null` |
-| Easy | due, prev interval = 28 | 90 | **mastered** | d + 90 |
-| Easy | due, otherwise | max(7, prev × 2) | in_review | d + interval |
+| D1 | Rating to SM-2 quality (0 to 5) | Easy = 5, Struggled = 3 (a pass, barely), Needed solution = 1 (a fail) | Struggled = 2, so both non-Easy ratings fail, which is closest to today's behaviour | **Confirmed** (the original grade meanings: 5 perfect, 3 correct with serious difficulty, 1 incorrect but remembered on seeing the answer) |
+| D2 | What a failure does | Repetitions back to 0, next review in 1 day, ease factor **unchanged** (the original SM-2 wording) | Also lower the ease factor by the formula (it would fall by 0.54 per fail) | **Confirmed** (the original wording, step 6) |
+| D3 | Reviewing before it is due | A failure always applies; a pass is logged but changes nothing (today's rule) | Treat every review the same, which lets cramming inflate the ease factor | **Confirmed** |
+| D4 | "Mastered" and "retired" | Drop "retired" and the 90-day recheck. "Mastered" becomes a label for a scheduled gap of 28+ days. No maximum gap | Keep a "retired" state after some gap; or cap the gap (e.g. 180 days) | **Confirmed** (drop retired) |
+| D5 | Schema | New migration: add `ease_factor` (integer, hundredths) and `repetitions`; drop `status`; make `next_review` NOT NULL; check constraints `ease_factor >= 130` and `repetitions >= 0` | Keep a stored `status` column | **Confirmed** (migrations `0001`, `0002`) |
+| D6 | API | `reviewState` gains `easeFactor` and `repetitions` and loses `status`; filter `status=retired` is no longer valid; progress loses its `retired` counts | Keep `retired` in the API as always zero | **Confirmed** (implemented) |
+| D7 | Existing tests | Replace the scheduler tests that encode rules we are removing (7/14/28/90-day ladder, "retired"); update the other tests' setup | Keep both rule sets (not recommended) | **Confirmed** (tests may be replaced, red first) |
+| D8 | Same-day repeats | Logged but change nothing (this replaces step 7 of the original, which repeats items graded below 4 until they score 4 or more) | Keep a same-day relearn queue on the Today screen | **Confirmed** |
+| D9 | Which ease factor builds the next gap | The one from **before** this review's update | The one after the update | **Confirmed** |
 
-- Failures (Needed solution, Struggled) always apply, whether or not the problem was due, and from any status including mastered and retired.
-- An early Easy is still logged (counts toward `times_reviewed`, updates `last_reviewed`) but leaves the schedule alone.
-- Intervals therefore only take the values 2, 3, 7, 14, 28, 90.
-- Next review counts from `attempted_on`, so a backdated attempt schedules from its own date.
+### The algorithm
+
+SM-2 keeps three numbers per problem: the gap in days (`interval_days`), how many passes in a row (`repetitions`), and the **ease factor** (EF), how quickly the gap should grow. A new problem starts at EF 2.50.
+
+**Quality.** Each rating becomes an SM-2 quality `q`:
+
+| Rating | q | Counts as |
+|---|---|---|
+| Easy | 5 | pass |
+| Struggled | 3 | pass (barely) |
+| Needed solution | 1 | fail |
+
+A pass is `q >= 3`. Next review is the attempt's date plus the new interval (so a backdated attempt schedules from its own date).
+
+**Applying one attempt.** Let `prev` be the current state (none for an unsolved problem) and `d` the attempt's `attempted_on`.
+
+1. **Same-day repeat** (the problem already has an attempt on `d`): the attempt is logged (it counts in `times_reviewed`) but changes nothing. The first attempt of a day decides; later ones that day are only recorded. (A repeat pass would be early anyway, so in practice this only matters for failures.)
+2. **Fail** (`q < 3`): `repetitions = 0`, `interval = 1`, EF unchanged (250 if this is the first attempt). This applies even before the problem is due and even if its gap was long (unless it is a same-day repeat, rule 1).
+3. **Early pass** (not the first attempt and `d < prev.next_review`): the attempt is logged (it counts in `times_reviewed` and sets `last_reviewed`) but the schedule does not change.
+4. **Pass that counts** (first attempt, or `d >= prev.next_review`):
+   - `repetitions` was 0: `interval = 1`
+   - `repetitions` was 1: `interval = 6`
+   - otherwise: `interval = round(prev.interval x prev.EF)`, using the EF from **before** this review, rounded half up
+   - then `repetitions + 1`, and the EF is updated: `EF = EF + (0.1 - (5 - q) x (0.08 + (5 - q) x 0.02))`, never below 1.30
+
+In whole hundredths the EF change is `10 - (5 - q) x (8 + (5 - q) x 2)`: **+10** for Easy and **-14** for Struggled.
+
+**Status** (for filters and progress) comes from the row: no row = unsolved; `interval_days < 28` = in review; `interval_days >= 28` = mastered.
+
+### How this differs from the original SM-2
+
+The original (Wozniak, 1990) has seven steps. Steps 1 to 6 are implemented as written, with these adaptations and ambiguities:
+
+- **Three buttons, not six grades.** Easy = 5, Struggled = 3, Needed solution = 1 (original meanings: 5 perfect response; 3 correct response recalled with serious difficulty; 1 incorrect response, but remembered on seeing the answer). Grades 0, 2 and 4 are not used.
+- **Early reviews (your choice, D3).** The original has no concept of an early review. Here a failure always applies and a pass before the due date is logged but changes nothing.
+- **Failure and the ease factor.** Step 6 says to start the item over "without changing the E-Factor", so a failure leaves it as it is. Step 5 could be read as updating it after every repetition; some implementations do. This spec follows the step 6 wording.
+- **Which ease factor builds the next gap.** The original does not say whether the interval uses the factor from before or after this review's update. This spec uses the factor from **before** (D9, confirmed; also what the widely used reference pseudocode does).
+- **Whole days and exact rounding.** The original multiplies freely; here gaps are whole days, rounded half up, using whole hundredths for the ease factor.
+- **"Mastered" is only a label** (gap of 28+ days). It does not change the schedule. The original has no end point, and neither does this.
+- **Step 7 is replaced** (D8). The original repeats, on the same day, items graded below 4 until they score 4 or more. Here a same-day repeat is logged but changes nothing.
 
 ### Replay
 
-`replay(attempts) → reviewState | null` sorts attempts by `attempted_on`, then `id`, and folds the rule above over them. No attempts → `null` (problem is unsolved, the row is deleted).
+`replay(attempts) -> reviewState | null` sorts attempts by `attempted_on`, then `id`, and folds the rule above over them. No attempts -> `null` (problem is unsolved, the row is deleted).
 
-Every write (log attempt, delete attempt) runs in one transaction: write the attempt change → load the problem's attempts → `replay()` → upsert or delete `review_state`.
+Every write (log attempt, delete attempt) runs in one transaction: write the attempt change -> load the problem's attempts -> `replay()` -> upsert or delete `review_state`.
 
 ### Due logic
 
-- Due when `next_review <= today` (retired is never due; mastered problems reappear for the 90-day recheck).
-- Sort: most overdue first, then Hard → Medium → Easy, then list position.
+- Due when `next_review <= today`. Every problem with a row is eventually due again.
+- Sort: most overdue first, then Hard -> Medium -> Easy, then list position.
 - Missed days are not rescheduled; the problem shows as overdue.
 - Show at most `DUE_LIMIT` (10) by default, with a "Show all" toggle.
 
 ### Worked example
 
-| Day | Rating | Prev interval | New interval | Next review | Status |
-|---|---|---|---|---|---|
-| 0 | Needed solution | — | 2 | Day 2 | in_review (first solve) |
-| 2 | Struggled | 2 | 3 | Day 5 | in_review (reset) |
-| 5 | Easy | 3 | 7 | Day 12 | in_review, max(7, 6) |
-| 12 | Easy | 7 | 14 | Day 26 | in_review |
-| 26 | Easy | 14 | 28 | Day 54 | in_review (still due-able) |
-| 54 | Easy | 28 | 90 | Day 144 | **mastered** |
-| 144 | Easy | 90 | 90 | — | **retired** |
+| Day | Rating | q | Repetitions | New interval | EF | Next review | Note |
+|---|---|---|---|---|---|---|---|
+| 0 | Needed solution | 1 | 0 | 1 | 2.50 | Day 1 | first attempt, a fail |
+| 1 | Struggled | 3 | 1 | 1 | 2.36 | Day 2 | pass, EF -0.14 |
+| 2 | Easy | 5 | 2 | 6 | 2.46 | Day 8 | second pass is always 6 days |
+| 8 | Easy | 5 | 3 | 15 | 2.56 | Day 23 | round(6 x 2.46) = 15 |
+| 23 | Easy | 5 | 4 | 38 | 2.66 | Day 61 | round(15 x 2.56) = 38; **mastered** |
+| 61 | Easy | 5 | 5 | 101 | 2.76 | Day 162 | round(38 x 2.66) = 101 |
 
 Variations:
-- An Easy on day 20 (before Day 26) is logged but changes nothing.
-- A Struggled on day 100 (while mastered) gives interval 3, next review Day 103, status in_review.
+- An Easy on day 20 (before Day 23) is logged but changes nothing.
+- A second attempt on the same day as an earlier one is logged but changes nothing, even a Needed solution.
+- A Needed solution on day 100 (while mastered) gives repetitions 0, interval 1, next review Day 101, EF still 2.76.
+- First attempt Easy gives Day 1, then Day 7 (interval 6), then Day 23 (interval 16), then interval 45 (EF 2.80 and 2.90).
+- Struggled on every review lowers the EF by 0.14 each time until it hits the 1.30 floor (after 9 reviews).
+- Rounding: 45 x 2.90 = 130.5 rounds up to 131.
 
 ---
 
@@ -210,9 +255,9 @@ Variations:
 | Screen | Route | Contents |
 |---|---|---|
 | Today | `/` | Due problems: title, pattern, days overdue, insight hidden behind "Reveal". Three rating buttons per row (one click logs the attempt for today). Header: due count and solved count (e.g. 42 / 250). |
-| Problems | `/problems` | All 250 with filters for pattern, difficulty, status (unsolved, in review, mastered, retired) and title search. Links to neetcode.io. |
+| Problems | `/problems` | All 250 with filters for pattern, difficulty, status (unsolved, in review, mastered) and title search. Links to neetcode.io. |
 | Problem detail | `/problems/[id]` | Problem info, current state, editable insight, attempt history with a delete button per row, and a form to log an attempt (rating, optional minutes, insight, optional date). |
-| Progress | `/progress` | Per-pattern bars: solved, mastered, retired, due. Attempts in the last 7 days. |
+| Progress | `/progress` | Per-pattern bars: solved, mastered, due. Attempts in the last 7 days. |
 
 ### Behavior
 
@@ -241,6 +286,7 @@ Validation: `rating` must be `easy`, `struggled`, or `needed_solution` (400); a 
 
 ### API details
 
+- **Review state shape (SM-2):** `reviewState` is `{ intervalDays, easeFactor, repetitions, nextReview, lastReviewed, timesReviewed }`. `easeFactor` is shown as a decimal (2.5), though it is stored in hundredths. There is no `status` field; problem rows carry a derived `status` of `unsolved`, `in review` or `mastered`, and the `status` filter accepts those three.
 - **Naming:** request bodies use `attempted_on` (as above); every response uses camelCase (`nextReview`, `intervalDays`, `daysOverdue`, ...).
 - **Responses:** errors are `{ "error": "message" }`. `POST .../attempts` returns `201 { attemptId, reviewState }` (the `attemptId` is what Undo deletes). `DELETE` returns `{ reviewState }` (`null` when the problem went back to unsolved). `PATCH .../insight` returns `{ insight }`. `GET /api/review/due` returns `{ total, items }`, where `total` is the full due count and `items` is cut to the limit. `GET /api/progress` returns `{ totals, patterns }`, with patterns in NeetCode order and `totals.attemptsLast7Days` counting today and the 6 days before.
 - **Bad input:** all fields are checked before the database is touched, so a bad request saves nothing. Malformed or non-numeric ids are 404. `insight` is trimmed, at most 500 characters, and blank means "none"; `PATCH` requires the `insight` field to be present. `minutes` is a whole number from 0 to 1440.
@@ -253,7 +299,7 @@ Validation: `rating` must be `easy`, `struggled`, or `needed_solution` (400); a 
 
 ## Build order
 
-Explain the plan before each stage; check each before starting the next. Commit and push after each stage passes.
+Explain the plan before each stage; check each before starting the next. Git follows `CLAUDE.md` (work on a branch; never commit or push unless asked).
 
 1. **Setup.** Next.js, Tailwind, Drizzle, Vitest, both databases and both env files, dev on 127.0.0.1:3001, start on 127.0.0.1:3000. Create the public GitHub repo `neetcode-tracker` and push. *Check:* dev server runs and a test passes.
 2. **Schema and seed.** Three tables, `seed.ts`, `fixture.json`. *Check:* seeding the fixture into the dev database twice leaves the same rows; insights survive a re-seed; seeding the fixture against `neetcode_tracker` is refused.
@@ -264,23 +310,28 @@ Explain the plan before each stage; check each before starting the next. Commit 
 7. **Progress.** Per-pattern counts. *Check:* totals match the Problems screen.
 8. **Real data and polish.** Fetch and verify the 250 list, seed it, empty states, errors, `install-launchd.sh`, `npm run deploy`, logging, manifest, README. *Check:* a fresh clone runs by following the README.
 
+**SM-2 switch (done, between stages 4 and 5):** scheduler tests first, then `lib/scheduler.ts`; new migrations `0001` (SM-2 columns) and `0002` (value checks), never editing `0000`; `attempts.ts`, `queries.ts`, validation and the API moved to the new shape; the stage 4 curl check re-run against a production build and matching the worked example. See `plan.md`.
+
 ---
 
 ## Tests
 
 ### Scheduler
 
-- First attempt with each rating: Easy → 7, Struggled → 3, Needed solution → 2.
-- The worked example produces exactly its table, including mastered on day 54 and retired on day 144.
-- Easy on a 14-day review gives 28 and stays in_review (not mastered).
-- Early Easy (before next_review) leaves interval, next_review and status unchanged but increments times_reviewed.
-- Overdue Easy counts normally and schedules from `attempted_on`.
-- Struggled or Needed solution before the due date still resets.
-- Struggled or Needed solution on a mastered or retired problem resets to in_review.
+- First attempt: Easy -> interval 1, repetitions 1, EF 2.60; Struggled -> interval 1, repetitions 1, EF 2.36; Needed solution -> interval 1, repetitions 0, EF 2.50.
+- The worked example produces exactly its table, including mastered on day 23.
+- Second pass in a row gives 6 days; later passes give `round(interval x EF)`.
+- Rounding is exact and half rounds up (45 x 2.90 = 131).
+- The EF never goes below 1.30, even after many Struggled ratings.
+- A failure leaves the EF unchanged, resets repetitions to 0 and the interval to 1.
+- A failure always applies: before the due date, and on a mastered problem (but not as a same-day repeat).
+- An early pass is logged (`times_reviewed`, `last_reviewed`) but changes nothing else.
+- A second attempt on the same day is logged but changes nothing, including a failure; the first attempt of the day decides; deleting it lets the next one count.
+- An overdue pass counts and schedules from `attempted_on`.
 - Replay sorts by date then id, so out-of-order and same-day attempts give the same result.
-- Replay of no attempts returns null.
-- Deleting the last attempt from the worked example sequence (replay of the first n − 1) restores the previous row.
-- Due on its next_review date and not the day before; retired is never due.
+- Replay of no attempts returns null; replaying the first n - 1 attempts restores the previous row.
+- Due on its `next_review` date and not the day before; a problem of any gap becomes due again.
+- Status is derived: no row = unsolved; interval 27 = in review; interval 28 = mastered.
 
 ### Test layout
 
@@ -289,6 +340,8 @@ Explain the plan before each stage; check each before starting the next. Commit 
 - `tests/routes.test.ts`: calls the real route handlers; creates its three throwaway problems before each test.
 - `tests/seed.test.ts`: runs the seed script as a command against the test database.
 - `tests/test-database.test.ts`: a small end-to-end example proving the test database, migrations and per-test reset work.
+- `tests/schema.test.ts`: the shape of `review_state` after the migrations (columns, required fields, no `status`) and its two check constraints.
+- `tests/api-shape.test.ts`: the ease factor shown to API clients as a decimal.
 
 ### Test database
 
@@ -325,6 +378,6 @@ Tests never touch the dev or real database. They use a throwaway Postgres 17 in 
 - User accounts, sync across devices, or hosting
 - Notifications or email reminders
 - Importing progress from NeetCode or LeetCode
-- Fancier scheduling such as SM-2
+- Scheduling beyond SM-2 (e.g. FSRS, per-pattern tuning)
 - An in-app code editor or test runner
 - Editing attempts (delete and re-log instead)

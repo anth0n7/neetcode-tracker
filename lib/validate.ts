@@ -7,7 +7,8 @@ import type { Rating } from "./scheduler";
 
 const RATINGS: Rating[] = ["easy", "struggled", "needed_solution"];
 const DIFFICULTIES = ["Easy", "Medium", "Hard"];
-const STATUSES = ["unsolved", "in review", "mastered", "retired"];
+// There is no "retired": SM-2 keeps every problem scheduled, at longer and longer gaps.
+const STATUSES = ["unsolved", "in review", "mastered"];
 
 const MAX_INSIGHT_LENGTH = 500;
 const MAX_MINUTES = 1440; // one day; anything bigger is surely a typo

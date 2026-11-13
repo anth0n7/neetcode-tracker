@@ -1,5 +1,7 @@
-// Tests for lib/attempts.ts against the dev database. Every test runs inside a
+// Tests for lib/attempts.ts against the test database. Every test runs inside a
 // transaction that is rolled back, so nothing is left behind.
+// (The SM-2 rules themselves are tested in scheduler.test.ts; these check that
+// the results are saved correctly.)
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { attempts, problems, reviewState } from "@/db/schema";
@@ -23,28 +25,47 @@ describe("logAttempt", () => {
       const { attemptId, reviewState: state } = await logAttempt(id, input(0, "needed_solution"), tx);
 
       expect(attemptId).toBeGreaterThan(0);
-      expect(state).toMatchObject({ intervalDays: 2, nextReview: day(2), status: "in_review", timesReviewed: 1 });
+      // A first-ever failure: gap of 1 day, no passes in a row, ease factor still 2.50.
+      expect(state).toEqual({
+        intervalDays: 1,
+        easeFactor: 250,
+        repetitions: 0,
+        nextReview: day(1),
+        lastReviewed: day(0),
+        timesReviewed: 1,
+      });
 
       const rows = await tx.select().from(attempts).where(eq(attempts.problemId, id));
       expect(rows).toHaveLength(1);
       const [saved] = await tx.select().from(reviewState).where(eq(reviewState.problemId, id));
-      expect(saved).toMatchObject({ intervalDays: 2, nextReview: day(2), lastReviewed: day(0), status: "in_review" });
+      expect(saved).toEqual({ problemId: id, ...state });
     }));
 
   it("follows the rules across several attempts", () =>
     withRollback(async (tx) => {
       const id = await makeProblem(tx);
-      await logAttempt(id, input(0, "easy"), tx); // interval 7, next day 7
-      const { reviewState: state } = await logAttempt(id, input(7, "easy"), tx); // due, so it counts: 14
-      expect(state).toMatchObject({ intervalDays: 14, nextReview: day(21), timesReviewed: 2 });
+      await logAttempt(id, input(0, "easy"), tx); // gap 1 day, due on day 1
+      const { reviewState: state } = await logAttempt(id, input(1, "easy"), tx); // due, so it counts: gap 6
+      expect(state).toMatchObject({ intervalDays: 6, easeFactor: 270, repetitions: 2, nextReview: day(7), timesReviewed: 2 });
     }));
 
   it("logs an early Easy without changing the schedule", () =>
     withRollback(async (tx) => {
       const id = await makeProblem(tx);
-      await logAttempt(id, input(0, "easy"), tx); // next review day 7
-      const { reviewState: state } = await logAttempt(id, input(3, "easy"), tx);
-      expect(state).toMatchObject({ intervalDays: 7, nextReview: day(7), timesReviewed: 2 });
+      await logAttempt(id, input(0, "easy"), tx); // due day 1
+      await logAttempt(id, input(1, "easy"), tx); // counts: gap 6, due day 7
+      const { reviewState: state } = await logAttempt(id, input(3, "easy"), tx); // day 3 is early
+      expect(state).toMatchObject({ intervalDays: 6, easeFactor: 270, nextReview: day(7), timesReviewed: 3 });
+      expect(await tx.select().from(attempts).where(eq(attempts.problemId, id))).toHaveLength(3);
+    }));
+
+  it("logs a second attempt on the same day without changing the schedule", () =>
+    withRollback(async (tx) => {
+      const id = await makeProblem(tx);
+      await logAttempt(id, input(0, "easy"), tx);
+      // Even a failure is only recorded when it is a repeat on the same day.
+      const { reviewState: state } = await logAttempt(id, input(0, "needed_solution"), tx);
+      expect(state).toMatchObject({ intervalDays: 1, easeFactor: 260, repetitions: 1, nextReview: day(1), timesReviewed: 2 });
       expect(await tx.select().from(attempts).where(eq(attempts.problemId, id))).toHaveLength(2);
     }));
 
@@ -99,11 +120,11 @@ describe("deleteAttempt", () => {
     withRollback(async (tx) => {
       const id = await makeProblem(tx);
       await logAttempt(id, input(0, "easy"), tx);
-      const second = await logAttempt(id, input(7, "struggled"), tx);
-      expect(second.reviewState).toMatchObject({ intervalDays: 3 });
+      const second = await logAttempt(id, input(7, "struggled"), tx); // due, a pass: gap 6, ease factor 2.46
+      expect(second.reviewState).toMatchObject({ intervalDays: 6, easeFactor: 246, repetitions: 2 });
 
       const { reviewState: state } = await deleteAttempt(id, second.attemptId, tx);
-      expect(state).toMatchObject({ intervalDays: 7, nextReview: day(7), timesReviewed: 1 });
+      expect(state).toMatchObject({ intervalDays: 1, easeFactor: 260, repetitions: 1, nextReview: day(1), timesReviewed: 1 });
     }));
 
   it("deleting the only attempt makes the problem unsolved again", () =>

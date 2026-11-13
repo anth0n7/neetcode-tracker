@@ -9,6 +9,7 @@
 import { and, count, desc, eq, gte, lte } from "drizzle-orm";
 import { attempts, problems, reviewState } from "@/db/schema";
 import { db } from "./db";
+import { reviewStateToApi, type ApiReviewState } from "./api-shape";
 import type { Conn } from "./attempts";
 import {
   addDays,
@@ -18,7 +19,6 @@ import {
   problemStatus,
   type DisplayStatus,
   type ReviewState,
-  type Status,
 } from "./scheduler";
 import type { ProblemFilters } from "./validate";
 
@@ -36,7 +36,7 @@ export type ProblemRow = {
   pattern: string;
   difficulty: string;
   insight: string | null;
-  status: DisplayStatus; // unsolved | in review | mastered | retired
+  status: DisplayStatus; // unsolved | in review | mastered
   nextReview: string | null;
   intervalDays: number | null;
   due: boolean; // due today or earlier
@@ -52,14 +52,13 @@ export type AttemptRow = {
 };
 
 // A problem plus its full history, for the detail page.
-export type ProblemDetail = ProblemRow & { attempts: AttemptRow[]; reviewState: ReviewState | null };
+export type ProblemDetail = ProblemRow & { attempts: AttemptRow[]; reviewState: ApiReviewState | null };
 
 export type PatternProgress = {
   pattern: string;
   total: number;
-  solved: number; // any problem with at least one attempt (includes mastered and retired)
-  mastered: number; // passed the 28-day review, waiting on the 90-day recheck
-  retired: number; // passed the 90-day recheck
+  solved: number; // any problem with at least one attempt (includes mastered)
+  mastered: number; // a gap of 28 days or more (still scheduled; it comes back when due)
   due: number;
 };
 
@@ -68,7 +67,6 @@ export type Progress = {
     problems: number;
     solved: number;
     mastered: number;
-    retired: number;
     due: number;
     attemptsLast7Days: number;
   };
@@ -91,10 +89,11 @@ function toLoaded(
 ): Loaded {
   const state: ReviewState | null = r && {
     intervalDays: r.intervalDays,
+    easeFactor: r.easeFactor,
+    repetitions: r.repetitions,
     nextReview: r.nextReview,
     lastReviewed: r.lastReviewed,
     timesReviewed: r.timesReviewed,
-    status: r.status as Status,
   };
   return {
     id: p.id,
@@ -171,7 +170,7 @@ export async function getProblem(id: number, today: string, conn: Conn = db): Pr
   const loaded = toLoaded(found.problem, found.state, today);
   return {
     ...publicRow(loaded),
-    reviewState: loaded.state,
+    reviewState: reviewStateToApi(loaded.state),
     attempts: history.map((a) => ({
       id: a.id,
       attemptedOn: a.attemptedOn,
@@ -204,7 +203,7 @@ export async function getProgress(today: string, conn: Conn = db): Promise<Progr
   // Group by pattern. `all` is already in list order, and a Map remembers the
   // order keys were first added, so patterns come out in NeetCode order.
   const byPattern = new Map<string, PatternProgress>();
-  const totals = { problems: 0, solved: 0, mastered: 0, retired: 0, due: 0, attemptsLast7Days: 0 };
+  const totals = { problems: 0, solved: 0, mastered: 0, due: 0, attemptsLast7Days: 0 };
 
   for (const p of all) {
     const entry = byPattern.get(p.pattern) ?? {
@@ -212,7 +211,6 @@ export async function getProgress(today: string, conn: Conn = db): Promise<Progr
       total: 0,
       solved: 0,
       mastered: 0,
-      retired: 0,
       due: 0,
     };
     entry.total++;
@@ -224,10 +222,6 @@ export async function getProgress(today: string, conn: Conn = db): Promise<Progr
     if (p.status === "mastered") {
       entry.mastered++;
       totals.mastered++;
-    }
-    if (p.status === "retired") {
-      entry.retired++;
-      totals.retired++;
     }
     if (p.due) {
       entry.due++;
