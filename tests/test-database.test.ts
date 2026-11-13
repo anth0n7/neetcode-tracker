@@ -1,9 +1,3 @@
-// A small end-to-end example that proves the test-database setup works.
-//
-// Test 1 runs real backend logic (logAttempt) against the real test Postgres and
-// COMMITS, with no rollback and no mocks. Test 2 then checks that the data from
-// test 1 is gone, which shows the per-test reset in tests/setup-db.ts works.
-// (Vitest runs the tests in a file from top to bottom, so the order is reliable.)
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { attempts, problems, reviewState } from "@/db/schema";
@@ -12,7 +6,6 @@ import { db } from "@/lib/db";
 
 describe("the test database", () => {
   it("is the test database, and logAttempt saves an attempt and its schedule", async () => {
-    // The app's own connection (lib/db.ts) must be talking to the test database.
     const { rows } = await db.execute(sql`select current_database() as name`);
     expect(rows[0].name).toBe("neetcode_tracker_test");
 
@@ -26,7 +19,6 @@ describe("the test database", () => {
       difficulty: "Easy",
     });
 
-    // First attempt, rated Easy: SM-2 says review again in 1 day, ease factor 2.60.
     const result = await logAttempt(1, {
       rating: "easy",
       minutes: null,
@@ -35,7 +27,6 @@ describe("the test database", () => {
     });
     expect(result.reviewState).toMatchObject({ intervalDays: 1, easeFactor: 260, repetitions: 1, nextReview: "2026-01-02" });
 
-    // Read it back with separate queries: both rows were really saved.
     expect(await db.select().from(attempts).where(eq(attempts.problemId, 1))).toHaveLength(1);
     const [saved] = await db.select().from(reviewState).where(eq(reviewState.problemId, 1));
     expect(saved).toMatchObject({ intervalDays: 1, easeFactor: 260, nextReview: "2026-01-02", timesReviewed: 1 });

@@ -1,7 +1,3 @@
-// Tests for lib/scheduler.ts: the SM-2 spaced-repetition rules (see docs/SPEC.md,
-// "Scheduling rules (SM-2)"). These are pure: no database, no clock.
-//
-// The ease factor (EF) is written in HUNDREDTHS everywhere: 250 means 2.50.
 import { describe, expect, it } from "vitest";
 import {
   addDays,
@@ -26,8 +22,6 @@ const att = (offset: number, rating: Attempt["rating"], id = nextId++): Attempt 
   rating,
 });
 
-// A state to start from: two passes in a row (interval 6), EF 2.50, due on day 10.
-// Tests override only the fields they care about.
 const state = (o: Partial<ReviewState> = {}): ReviewState => ({
   intervalDays: 6,
   easeFactor: 250,
@@ -60,8 +54,6 @@ describe("date helpers", () => {
 });
 
 describe("first attempt", () => {
-  // The first interval is always 1 day. A pass counts as one repetition and
-  // adjusts the ease factor; a failure leaves it at the starting 2.50.
   it.each([
     ["easy", 260, 1],
     ["struggled", 236, 1],
@@ -80,7 +72,6 @@ describe("first attempt", () => {
 });
 
 describe("worked example (the table in the spec)", () => {
-  //  day, rating, interval, ease factor, repetitions, next review (day)
   const steps: [number, Attempt["rating"], number, number, number, number][] = [
     [0, "needed_solution", 1, 250, 0, 1],
     [1, "struggled", 1, 236, 1, 2],
@@ -138,15 +129,13 @@ describe("the interval ladder", () => {
     expect(s).toMatchObject({ intervalDays: 6, repetitions: 2, nextReview: at(7) });
   });
 
-  // First attempt Easy, then Easy each time it is due. Each gap is the previous
-  // gap times the ease factor from BEFORE that review's update.
   it("later gaps are the previous gap times the ease factor", () => {
     let s: ReviewState | null = null;
     const expected = [
       { day: 0, interval: 1, ease: 260, next: 1 },
       { day: 1, interval: 6, ease: 270, next: 7 },
-      { day: 7, interval: 16, ease: 280, next: 23 }, // 6 x 2.70 = 16.2
-      { day: 23, interval: 45, ease: 290, next: 68 }, // 16 x 2.80 = 44.8
+      { day: 7, interval: 16, ease: 280, next: 23 },
+      { day: 23, interval: 45, ease: 290, next: 68 },
     ];
     for (const e of expected) {
       s = applyAttempt(s, att(e.day, "easy"));
@@ -154,13 +143,12 @@ describe("the interval ladder", () => {
     }
   });
 
-  // Gaps are whole days, rounded to the nearest, with exact halves rounding UP.
   it.each([
-    [45, 290, 131], // 130.5 -> 131 (half rounds up)
-    [10, 255, 26], // 25.5 -> 26
-    [15, 256, 38], // 38.4 -> 38 (rounds down)
-    [6, 250, 15], // exactly 15
-    [16, 280, 45], // 44.8 -> 45
+    [45, 290, 131],
+    [10, 255, 26],
+    [15, 256, 38],
+    [6, 250, 15],
+    [16, 280, 45],
   ])("%i days x ease %i rounds to %i", (interval, ease, expected) => {
     const s = applyAttempt(state({ intervalDays: interval, easeFactor: ease, repetitions: 3, nextReview: at(0) }), att(0, "easy"));
     expect(s.intervalDays).toBe(expected);
@@ -176,7 +164,7 @@ describe("the ease factor", () => {
 
   it("never drops below 1.30", () => {
     const low = state({ easeFactor: 135, nextReview: at(0) });
-    expect(applyAttempt(low, att(0, "struggled")).easeFactor).toBe(130); // 135 - 14 = 121 -> 130
+    expect(applyAttempt(low, att(0, "struggled")).easeFactor).toBe(130);
     const floor = state({ easeFactor: 130, nextReview: at(0) });
     expect(applyAttempt(floor, att(0, "struggled")).easeFactor).toBe(130);
   });
@@ -185,7 +173,7 @@ describe("the ease factor", () => {
     let s: ReviewState | null = null;
     const seen: number[] = [];
     for (let i = 0; i < 12; i++) {
-      const day: number = s ? daysBetween(D0, s.nextReview) : 0; // always review exactly when due
+      const day: number = s ? daysBetween(D0, s.nextReview) : 0;
       s = applyAttempt(s, att(day, "struggled"));
       seen.push(s.easeFactor);
     }
@@ -222,7 +210,6 @@ describe("failures", () => {
 });
 
 describe("early passes (before the due date)", () => {
-  // Both Easy and Struggled are passes. Early, they are logged but change nothing.
   it.each(["easy", "struggled"] as const)("an early %s changes nothing except the log", (rating) => {
     const before = state({ nextReview: at(10) });
     const after = applyAttempt(before, att(5, rating));
@@ -245,9 +232,6 @@ describe("early passes (before the due date)", () => {
 });
 
 describe("same-day repeats", () => {
-  // If the problem already has an attempt on this date, a further attempt that day
-  // is logged (it counts in timesReviewed) but changes nothing. A repeat PASS would
-  // be "early" anyway; what this adds is that a repeat FAILURE is ignored too.
   const reviewedToday = () => state({ lastReviewed: at(5), nextReview: at(9), timesReviewed: 3 });
 
   it("a failure on the same day as an earlier attempt is logged but changes nothing", () => {
@@ -268,10 +252,8 @@ describe("same-day repeats", () => {
   });
 
   it("the first attempt of the day decides; later ones that day are only logged (replay)", () => {
-    // Easy first, then a Needed solution the same evening: the Easy stands.
     const morningEasy = replay([att(0, "easy", 1), att(0, "needed_solution", 2)])!;
     expect(morningEasy).toMatchObject({ intervalDays: 1, repetitions: 1, easeFactor: 260, nextReview: at(1), timesReviewed: 2 });
-    // Needed solution first, then an Easy the same day: the failure stands.
     const morningFail = replay([att(0, "needed_solution", 1), att(0, "easy", 2)])!;
     expect(morningFail).toMatchObject({ intervalDays: 1, repetitions: 0, easeFactor: 250, nextReview: at(1), timesReviewed: 2 });
   });
@@ -283,8 +265,8 @@ describe("same-day repeats", () => {
 
   it("deleting the first attempt of the day lets the next one count (undo)", () => {
     const both = [att(0, "easy", 1), att(0, "needed_solution", 2)];
-    expect(replay(both)).toMatchObject({ repetitions: 1, easeFactor: 260 }); // the Easy counts
-    expect(replay(both.slice(1))).toMatchObject({ repetitions: 0, easeFactor: 250, timesReviewed: 1 }); // now the failure does
+    expect(replay(both)).toMatchObject({ repetitions: 1, easeFactor: 260 });
+    expect(replay(both.slice(1))).toMatchObject({ repetitions: 0, easeFactor: 250, timesReviewed: 1 });
   });
 });
 
@@ -301,10 +283,8 @@ describe("replay", () => {
   });
 
   it("orders same-day attempts by id (and the order matters)", () => {
-    // Struggled first: gap 1, EF 2.36; the later same-day Easy is only logged.
     const struggledFirst = replay([att(0, "easy", 2), att(0, "struggled", 1)])!;
     expect(struggledFirst).toMatchObject({ easeFactor: 236, timesReviewed: 2 });
-    // Easy first: gap 1, EF 2.60; the later same-day Struggled is only logged.
     const easyFirst = replay([att(0, "struggled", 2), att(0, "easy", 1)])!;
     expect(easyFirst).toMatchObject({ easeFactor: 260, timesReviewed: 2 });
   });

@@ -39,6 +39,23 @@ Current work is tracked in plan.md. Read it at the start of each session, do onl
 - Never edit already-applied migrations. Create a new one.
 - Never read, print, or commit `.env` or secrets. Document variables in `.env.example`.
 
+## Testing
+
+- Favor a small number of meaningful tests over exhaustive coverage.
+- Prioritize: scheduler logic, data integrity, and core API flows.
+- Do not write tests that only restate what the type system or ORM already guarantees.
+- Do test schema constraints our own code relies on (unique keys, foreign keys).
+- Use specific value assertions. Avoid weak checks like `toBeDefined()` or `toBeTruthy()` on their own.
+- The scheduler (SM-2) is the exception: go thorough, including first review, failed review, the 1.3 ease floor, and same-day repeat reviews.
+- Never mock the thing being tested.
+- Tests run only against the throwaway Docker Postgres. Never touch any other database.
+- Run `npm run check` before calling any task done. Commit only when it's green.
+
+## Comments
+
+- Don't write comments that restate the code. Explain *why*, not *what*.
+- When you change a function, update or delete any comment that no longer matches.
+
 ## When you finish, tell me
 - Files changed and why
 - The riskiest part of the change

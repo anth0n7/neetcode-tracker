@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { checkRequest, HttpError, type RequestInfo } from "@/lib/http";
 
-// Build a request description, overriding only what the test cares about.
 const req = (o: Partial<RequestInfo> = {}): RequestInfo => ({
   method: "GET",
   host: "localhost:3000",
@@ -13,7 +12,7 @@ const req = (o: Partial<RequestInfo> = {}): RequestInfo => ({
 function status(info: RequestInfo): number | null {
   try {
     checkRequest(info);
-    return null; // allowed
+    return null;
   } catch (e) {
     if (e instanceof HttpError) return e.status;
     throw e;
@@ -25,8 +24,6 @@ describe("host check (applies to every request)", () => {
     expect(status(req({ host }))).toBeNull();
   });
 
-  // A hostile site can point its own name at 127.0.0.1 ("DNS rebinding"); the
-  // browser then sends that name as the Host, so we refuse any non-loopback host.
   it.each(["evil.example.com", "evil.example.com:3000", "192.168.0.76:3000", "localhost.evil.com"])(
     "rejects %s with 403",
     (host) => {

@@ -1,5 +1,3 @@
-// GET /api/progress - counts per pattern (solved, mastered, due), the
-// overall totals, and how many attempts were logged in the last 7 days.
 import { getProgress } from "@/lib/queries";
 import { handle } from "@/lib/route";
 import { todayLocal } from "@/lib/today";
