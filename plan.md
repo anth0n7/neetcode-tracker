@@ -16,8 +16,8 @@ and how we work together is in [CLAUDE.md](CLAUDE.md). Tick boxes as stages land
 | n/a | Remove code comments, tighten docs | Done, merged to `main` (PR #2) |
 | 5 | Today screen | Done, merged (PR #2). `npm run check` now includes `next build`. Behaviour checked by hand in a browser |
 | 5b | Real data (fetch the 250 list) | Done, merged (PR #2). `data/neetcode250.json` has 250 entries (content and order checked by you) and is seeded into the real database (250 rows, safe to re-run) |
-| 6a | Problems list (branch `stage-6-problems`) | Built, `npm run check` passes (267 tests), committed. Waiting for your browser check on the test database |
-| 6b | Problem detail | Next, in the same PR as 6a (separate commit) |
+| 6a | Problems list (branch `stage-6-problems`) | Built and committed. Filters run in the browser through one shared `filterProblems`, mirrored to the URL, bad URL values ignored |
+| 6b | Problem detail | Built, same branch and PR as 6a (separate commit). Insight editor, log form with early-rating warning, history with confirmed delete. Waiting for your browser check on the test database |
 | 7 | Progress screen | |
 | 8 | Polish, running it as an app | |
 
