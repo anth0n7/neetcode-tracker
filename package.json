@@ -11,6 +11,7 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:migrate:dev": "DB_ENV=dev drizzle-kit migrate",
+    "fetch:neetcode250": "tsx scripts/fetch-neetcode250.ts",
     "seed": "tsx scripts/seed.ts data/neetcode250.json",
     "seed:dev": "tsx scripts/seed.ts data/fixture.json --dev",
     "typecheck": "tsc --noEmit",

@@ -15,7 +15,7 @@ and how we work together is in [CLAUDE.md](CLAUDE.md). Tick boxes as stages land
 | 4b | Switch the scheduler to SM-2 | Done, merged to `main` (PR #1). 47 scheduler tests, migrations `0001` and `0002` applied everywhere, API on the new shape |
 | n/a | Remove code comments, tighten docs (branch `no-comments`) | Done, committed on that branch (`00d4917`), not pushed |
 | 5 | Today screen (branch `stage-5-today`) | Built, `npm run check` passes (242 tests, now includes `next build`), not committed. You checked the behaviour by hand in a browser and it works as expected |
-| 5b | Real data (fetch the 250 list) | After Stage 5 |
+| 5b | Real data (fetch the 250 list) (branch `stage-5b-real-data`) | Done. List fetched into `data/neetcode250.json` (250 entries, you checked content and order), parser tested, `npm run check` passes. Seeded into the real database twice: 250 rows both times. In the same PR as Stage 5 |
 | 6 | Problems and detail screens | |
 | 7 | Progress screen | |
 | 8 | Real data, polish, running it as an app | |
