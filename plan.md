@@ -12,8 +12,10 @@ and how we work together is in [CLAUDE.md](CLAUDE.md). Tick boxes as stages land
 | 3 | Scheduler (pure rules, 33 tests) | Done, pushed |
 | 4 | API (7 endpoints, same-origin checks) | Done, pushed |
 | n/a | Verification setup (`npm run check`, isolated test DB, `CLAUDE.md`) | Done, pushed |
-| 4b | Switch the scheduler to SM-2 (branch `sm2-scheduler`) | Done, not committed. 47 scheduler tests, migrations `0001` and `0002` applied everywhere, API on the new shape, `npm run check` passes |
-| 5 | Today screen | Next (waiting for your answers to U1 to U5 below) |
+| 4b | Switch the scheduler to SM-2 | Done, merged to `main` (PR #1). 47 scheduler tests, migrations `0001` and `0002` applied everywhere, API on the new shape |
+| n/a | Remove code comments, tighten docs (branch `no-comments`) | Done, committed on that branch (`00d4917`), not pushed |
+| 5 | Today screen (branch `stage-5-today`) | Built, `npm run check` passes (242 tests, now includes `next build`), not committed. You checked the behaviour by hand in a browser and it works as expected |
+| 5b | Real data (fetch the 250 list) | After Stage 5 |
 | 6 | Problems and detail screens | |
 | 7 | Progress screen | |
 | 8 | Real data, polish, running it as an app | |
@@ -30,11 +32,11 @@ and how we work together is in [CLAUDE.md](CLAUDE.md). Tick boxes as stages land
 5. **Git follows `CLAUDE.md`.** Work on a branch, and never commit or push unless you ask.
 6. **Finish with the report.** CLAUDE.md asks for the files changed, the riskiest part, and what was not tested.
 
-## Decisions needed before Stage 5
+## Decisions before Stage 5 (all made)
 
 (Numbered U1 to U5, for "UI", so they are not confused with the spec's SM-2 decisions D1 to D9.)
 
-These touch dependencies or visible behaviour, so they are yours to make.
+Chosen: U1 (a), U2 (a), U3 as proposed, U4 as recommended (Stage 5b right after Stage 5), U5 yes (add `next build` to `check` once screens exist, so as part of Stage 5). The options are kept below for the record.
 
 **U1. How do we test the screens?** Today is the first screen with real interaction.
 - **(a) Recommended: pure logic plus a real browser check.** Keep the screen's behaviour (remove a row, undo, counts) in plain functions tested with Vitest, add no dependencies, and check the page in a real browser by hand.
@@ -53,7 +55,7 @@ These touch dependencies or visible behaviour, so they are yours to make.
 
 **U5. Should `npm run check` also run `next build`?** It would catch problems the other three miss (route and page compile errors) but adds about 10 seconds. Recommended: yes, once screens exist.
 
-## Stage 4b: Switch the scheduler to SM-2 (done, on branch `sm2-scheduler`, not committed)
+## Stage 4b: Switch the scheduler to SM-2 (done, merged in PR #1)
 
 The spec ([docs/SPEC.md](docs/SPEC.md), "Scheduling rules (SM-2)") records every decision (D1 to D9 in the spec), and all are confirmed and implemented. The goal was to stay as close to the original SM-2 as possible. The spec lists the differences under "How this differs from the original SM-2".
 
@@ -123,9 +125,9 @@ From the spec's acceptance checklist:
 
 - **Time zones and "today".** Everything uses the local calendar date at midnight. The scheduler never reads the clock, so every date rule is testable.
 - **Next.js 16 differences.** `AGENTS.md` says this version differs from what I know, so I read the bundled docs in `node_modules/next/dist/docs/` before writing routes or pages.
-- **The UI is the least-tested layer** unless we pick U1 (b) or (c).
+- **The UI is the least-tested layer.** We chose U1 (a): only the pure logic is tested, and the React wiring is checked by hand.
 - **Public repo.** No personal data, no `.env` files; commits use the GitHub noreply email.
-- **Uncommitted work.** The SM-2 work (about 20 files) is on branch `sm2-scheduler` and not committed; Stages 1 to 4 and the verification setup are pushed to `main`.
+- **Unpushed work.** The comment cleanup is committed on `no-comments` but not pushed or merged. The old branch `sm2-scheduler` still exists locally and on the remote.
 
 ## Not in v1
 
