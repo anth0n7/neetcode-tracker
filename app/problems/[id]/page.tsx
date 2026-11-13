@@ -41,7 +41,7 @@ export default async function ProblemPage({ params }: { params: Promise<{ id: st
 
   return (
     <main className="mx-auto w-full max-w-2xl px-4 py-8">
-      <Link href="/problems" className="text-sm text-zinc-600 underline-offset-2 hover:underline dark:text-zinc-400">
+      <Link href="/" className="text-sm text-zinc-600 underline-offset-2 hover:underline dark:text-zinc-400">
         ← Problems
       </Link>
 

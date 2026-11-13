@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ProblemRow } from "@/lib/queries";
 import {
@@ -100,7 +101,20 @@ export function TodayList({ items, solved, problems }: { items: ProblemRow[]; so
       )}
 
       {due === 0 ? (
-        <p className="py-16 text-center text-zinc-600 dark:text-zinc-400">Nothing due today</p>
+        solved === 0 ? (
+          <div className="py-16 text-center text-zinc-600 dark:text-zinc-400">
+            <p>Nothing to review yet.</p>
+            <p className="mt-1">
+              Log your first attempt from the{" "}
+              <Link href="/" className="underline underline-offset-2">
+                Problems page
+              </Link>{" "}
+              and it will come back here when it is due.
+            </p>
+          </div>
+        ) : (
+          <p className="py-16 text-center text-zinc-600 dark:text-zinc-400">Nothing due today</p>
+        )
       ) : (
         <ul className="flex flex-col gap-3">
           {rows.map((item) => (

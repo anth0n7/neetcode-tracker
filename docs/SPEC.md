@@ -254,8 +254,8 @@ Variations:
 
 | Screen | Route | Contents |
 |---|---|---|
-| Today | `/` | Due problems: title, pattern, days overdue, insight hidden behind "Reveal". Three rating buttons per row (one click logs the attempt for today). Header: due count and solved count (e.g. 42 / 250). |
-| Problems | `/problems` | All 250 with filters for pattern, difficulty, status (unsolved, in review, mastered) and title search. Links to neetcode.io. |
+| Problems (home) | `/` | All 250 grouped by pattern, each group with its solved count and progress bar. Filters for pattern, difficulty, status (unsolved, in review, mastered) and title search. Links to neetcode.io. `/problems` redirects here. |
+| Today | `/today` | Due problems: title, pattern, days overdue, insight hidden behind "Reveal". Three rating buttons per row (one click logs the attempt for today). Header: due count and solved count (e.g. 42 / 250). With nothing solved yet, it points to the Problems page. |
 | Problem detail | `/problems/[id]` | Problem info, current state, editable insight, attempt history with a delete button per row, and a form to log an attempt (rating, optional minutes, insight, optional date). |
 | Progress | `/progress` | Per-pattern bars: solved, mastered, due. Attempts in the last 7 days. |
 

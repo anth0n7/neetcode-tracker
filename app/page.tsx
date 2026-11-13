@@ -1,16 +1,18 @@
 import { connection } from "next/server";
-import { getDue, getProgress } from "@/lib/queries";
+import { parseFilterParams } from "@/lib/problem-filters";
+import { listProblems } from "@/lib/queries";
 import { todayLocal } from "@/lib/today";
-import { DUE_LIMIT } from "@/lib/config";
-import { TodayList } from "./today-list";
+import { ProblemsTable } from "./problems-table";
 
-export default async function Home() {
+export default async function ProblemsPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   await connection();
-  const today = todayLocal();
-  const [due, progress] = await Promise.all([
-    getDue({ today, limit: DUE_LIMIT, all: true }),
-    getProgress(today),
-  ]);
+  const rows = await listProblems({}, todayLocal());
+  const patterns = [...new Set(rows.map((r) => r.pattern))];
+  const initialFilters = parseFilterParams(await searchParams, patterns);
 
-  return <TodayList items={due.items} solved={progress.totals.solved} problems={progress.totals.problems} />;
+  return <ProblemsTable rows={rows} patterns={patterns} initialFilters={initialFilters} />;
 }

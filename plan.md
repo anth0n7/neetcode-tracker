@@ -18,6 +18,7 @@ and how we work together is in [CLAUDE.md](CLAUDE.md). Tick boxes as stages land
 | 5b | Real data (fetch the 250 list) | Done, merged (PR #2). `data/neetcode250.json` has 250 entries (content and order checked by you) and is seeded into the real database (250 rows, safe to re-run) |
 | 6a | Problems list (branch `stage-6-problems`) | Built and committed. Filters run in the browser through one shared `filterProblems`, mirrored to the URL, bad URL values ignored |
 | 6b | Problem detail | Built, same branch and PR as 6a (separate commit). Insight editor, log form with early-rating warning, history with confirmed delete. Waiting for your browser check on the test database |
+| 6c | Routes and look (same branch, same PR) | Commit 1 done: Problems is the home page, Today moved to `/today`, `/problems` redirects to `/`. Commit 2 (redesign: refined table grouped by pattern with progress bars, shared styles, Today and detail restyled) next |
 | 7 | Progress screen | |
 | 8 | Polish, running it as an app | |
 
@@ -69,7 +70,7 @@ Each step went test-first:
 6. Verification. `npm run check` passes (lint, typecheck, 228 tests). Six deliberate breaks of the API and query logic were all caught. The curl check against a production build on the dev database matched the spec's worked example line by line, including an early Easy, a same-day repeat, undo, and a failure on a mastered problem. The dev and real databases were left clean.
 7. Docs. The spec's DRAFT banner is gone, its decisions are marked confirmed, and this plan is updated.
 
-## Stage 5: Today screen (`/`)
+## Stage 5: Today screen (`/today`)
 
 Build the due list with title (linked out), pattern, days overdue, and the saved insight hidden behind Reveal. Each row has three rating buttons that log today's attempt in one click. The header shows the due count and solved count (e.g. `42 / 250`). An Undo toast (about 5 seconds) deletes the attempt just logged. "Show all" appears beyond 10 rows, and an empty state says "Nothing due today".
 
@@ -86,7 +87,7 @@ Seed it into the real database only after you've approved the summary.
 Tests first: the importer's parsing of a saved sample page (no network in tests); `seed.ts` already enforces exactly 250 entries.
 Check: `npm run seed` loads 250; running it twice still gives 250; insights survive.
 
-## Stage 6: Problems and detail (`/problems`, `/problems/[id]`)
+## Stage 6: Problems and detail (`/`, `/problems/[id]`)
 
 - **Problems.** All problems, with filters for pattern, difficulty and status (unsolved, in review, mastered), title search, link out. Filters live in the URL so a filtered view can be bookmarked.
 - **Detail.** Problem info, current schedule, editable insight, attempt history with a delete button per row, and the log form (rating, optional minutes, insight, optional date). The form warns before an Easy that won't count ("Not due until Nov 20, so an Easy won't change the schedule").
