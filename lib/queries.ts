@@ -12,7 +12,7 @@ import {
   type DisplayStatus,
   type ReviewState,
 } from "./scheduler";
-import type { ProblemFilters } from "./validate";
+import { filterProblems, type ProblemFilters } from "./problem-filters";
 
 export type ProblemRow = {
   id: number;
@@ -108,17 +108,7 @@ function publicRow(loaded: Loaded): ProblemRow {
 }
 
 export async function listProblems(filters: ProblemFilters, today: string, conn: Conn = db): Promise<ProblemRow[]> {
-  const needle = filters.q?.toLowerCase();
-  const all = await loadAll(conn, today);
-  return all
-    .filter(
-      (p) =>
-        (!filters.pattern || p.pattern === filters.pattern) &&
-        (!filters.difficulty || p.difficulty === filters.difficulty) &&
-        (!filters.status || p.status === filters.status) &&
-        (!needle || p.title.toLowerCase().includes(needle)),
-    )
-    .map(publicRow);
+  return filterProblems(await loadAll(conn, today), filters).map(publicRow);
 }
 
 export async function getProblem(id: number, today: string, conn: Conn = db): Promise<ProblemDetail | null> {

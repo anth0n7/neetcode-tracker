@@ -13,15 +13,16 @@ and how we work together is in [CLAUDE.md](CLAUDE.md). Tick boxes as stages land
 | 4 | API (7 endpoints, same-origin checks) | Done, pushed |
 | n/a | Verification setup (`npm run check`, isolated test DB, `CLAUDE.md`) | Done, pushed |
 | 4b | Switch the scheduler to SM-2 | Done, merged to `main` (PR #1). 47 scheduler tests, migrations `0001` and `0002` applied everywhere, API on the new shape |
-| n/a | Remove code comments, tighten docs (branch `no-comments`) | Done, committed on that branch (`00d4917`), not pushed |
-| 5 | Today screen (branch `stage-5-today`) | Built, `npm run check` passes (242 tests, now includes `next build`), not committed. You checked the behaviour by hand in a browser and it works as expected |
-| 5b | Real data (fetch the 250 list) (branch `stage-5b-real-data`) | Done. List fetched into `data/neetcode250.json` (250 entries, you checked content and order), parser tested, `npm run check` passes. Seeded into the real database twice: 250 rows both times. In the same PR as Stage 5 |
-| 6 | Problems and detail screens | |
+| n/a | Remove code comments, tighten docs | Done, merged to `main` (PR #2) |
+| 5 | Today screen | Done, merged (PR #2). `npm run check` now includes `next build`. Behaviour checked by hand in a browser |
+| 5b | Real data (fetch the 250 list) | Done, merged (PR #2). `data/neetcode250.json` has 250 entries (content and order checked by you) and is seeded into the real database (250 rows, safe to re-run) |
+| 6a | Problems list (branch `stage-6-problems`) | Built, `npm run check` passes (267 tests), committed. Waiting for your browser check on the test database |
+| 6b | Problem detail | Next, in the same PR as 6a (separate commit) |
 | 7 | Progress screen | |
-| 8 | Real data, polish, running it as an app | |
+| 8 | Polish, running it as an app | |
 
-228 tests pass. The 250-problem list has not been fetched yet; the dev database holds
-5 fake fixture problems.
+267 tests pass. The real database holds the 250 problems and no attempts. The dev
+database holds 5 fake fixture problems.
 
 ## How we work (every stage)
 
