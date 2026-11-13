@@ -13,15 +13,17 @@ and how we work together is in [CLAUDE.md](CLAUDE.md). Tick boxes as stages land
 | 4 | API (7 endpoints, same-origin checks) | Done, pushed |
 | n/a | Verification setup (`npm run check`, isolated test DB, `CLAUDE.md`) | Done, pushed |
 | 4b | Switch the scheduler to SM-2 | Done, merged to `main` (PR #1). 47 scheduler tests, migrations `0001` and `0002` applied everywhere, API on the new shape |
-| n/a | Remove code comments, tighten docs (branch `no-comments`) | Done, committed on that branch (`00d4917`), not pushed |
-| 5 | Today screen (branch `stage-5-today`) | Built, `npm run check` passes (242 tests, now includes `next build`), not committed. You checked the behaviour by hand in a browser and it works as expected |
-| 5b | Real data (fetch the 250 list) (branch `stage-5b-real-data`) | Done. List fetched into `data/neetcode250.json` (250 entries, you checked content and order), parser tested, `npm run check` passes. Seeded into the real database twice: 250 rows both times. In the same PR as Stage 5 |
-| 6 | Problems and detail screens | |
+| n/a | Remove code comments, tighten docs | Done, merged to `main` (PR #2) |
+| 5 | Today screen | Done, merged (PR #2). `npm run check` now includes `next build`. Behaviour checked by hand in a browser |
+| 5b | Real data (fetch the 250 list) | Done, merged (PR #2). `data/neetcode250.json` has 250 entries (content and order checked by you) and is seeded into the real database (250 rows, safe to re-run) |
+| 6a | Problems list (branch `stage-6-problems`) | Built and committed. Filters run in the browser through one shared `filterProblems`, mirrored to the URL, bad URL values ignored |
+| 6b | Problem detail | Built, same branch and PR as 6a (separate commit). Insight editor, log form with early-rating warning, history with confirmed delete. Waiting for your browser check on the test database |
+| 6c | Routes and look (same branch, same PR) | Done in two commits. Commit 1: Problems is the home page, Today moved to `/today`, `/problems` redirects to `/`. Commit 2: redesign (refined table grouped by pattern with progress bars, shared style tokens, nav, Today and detail restyled). Screenshots checked in headless Chrome (light mode, wide and narrow); dark mode not seen. Waiting for your browser check on the test database |
 | 7 | Progress screen | |
-| 8 | Real data, polish, running it as an app | |
+| 8 | Polish, running it as an app | |
 
-228 tests pass. The 250-problem list has not been fetched yet; the dev database holds
-5 fake fixture problems.
+267 tests pass. The real database holds the 250 problems and no attempts. The dev
+database holds 5 fake fixture problems.
 
 ## How we work (every stage)
 
@@ -68,7 +70,7 @@ Each step went test-first:
 6. Verification. `npm run check` passes (lint, typecheck, 228 tests). Six deliberate breaks of the API and query logic were all caught. The curl check against a production build on the dev database matched the spec's worked example line by line, including an early Easy, a same-day repeat, undo, and a failure on a mastered problem. The dev and real databases were left clean.
 7. Docs. The spec's DRAFT banner is gone, its decisions are marked confirmed, and this plan is updated.
 
-## Stage 5: Today screen (`/`)
+## Stage 5: Today screen (`/today`)
 
 Build the due list with title (linked out), pattern, days overdue, and the saved insight hidden behind Reveal. Each row has three rating buttons that log today's attempt in one click. The header shows the due count and solved count (e.g. `42 / 250`). An Undo toast (about 5 seconds) deletes the attempt just logged. "Show all" appears beyond 10 rows, and an empty state says "Nothing due today".
 
@@ -85,7 +87,7 @@ Seed it into the real database only after you've approved the summary.
 Tests first: the importer's parsing of a saved sample page (no network in tests); `seed.ts` already enforces exactly 250 entries.
 Check: `npm run seed` loads 250; running it twice still gives 250; insights survive.
 
-## Stage 6: Problems and detail (`/problems`, `/problems/[id]`)
+## Stage 6: Problems and detail (`/`, `/problems/[id]`)
 
 - **Problems.** All problems, with filters for pattern, difficulty and status (unsolved, in review, mastered), title search, link out. Filters live in the URL so a filtered view can be bookmarked.
 - **Detail.** Problem info, current schedule, editable insight, attempt history with a delete button per row, and the log form (rating, optional minutes, insight, optional date). The form warns before an Easy that won't count ("Not due until Nov 20, so an Easy won't change the schedule").

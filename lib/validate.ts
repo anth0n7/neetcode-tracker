@@ -1,10 +1,11 @@
 import { DUE_LIMIT } from "./config";
 import { HttpError } from "./http";
+import { DIFFICULTIES, STATUSES, type ProblemFilters } from "./problem-filters";
 import type { Rating } from "./scheduler";
 
+export type { ProblemFilters };
+
 const RATINGS: Rating[] = ["easy", "struggled", "needed_solution"];
-const DIFFICULTIES = ["Easy", "Medium", "Hard"];
-const STATUSES = ["unsolved", "in review", "mastered"];
 
 const MAX_INSIGHT_LENGTH = 500;
 const MAX_MINUTES = 1440;
@@ -62,8 +63,6 @@ export function parseDueOptions(params: URLSearchParams): { limit: number; all: 
 
   return { limit: limitRaw === null ? DUE_LIMIT : Number(limitRaw), all: allRaw === "true" };
 }
-
-export type ProblemFilters = { pattern?: string; difficulty?: string; status?: string; q?: string };
 
 export function parseProblemFilters(params: URLSearchParams): ProblemFilters {
   const filters: ProblemFilters = {};
