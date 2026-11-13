@@ -8,6 +8,20 @@
       "when": 1794510407823,
       "tag": "0000_warm_mattie_franklin",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1794551822761,
+      "tag": "0001_sm2_review_state",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1794552423166,
+      "tag": "0002_review_state_value_checks",
+      "breakpoints": true
     }
   ]
 }
