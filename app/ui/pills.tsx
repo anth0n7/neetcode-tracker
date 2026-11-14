@@ -25,6 +25,15 @@ export function DifficultyLabel({ difficulty }: { difficulty: string }) {
   );
 }
 
+export function DifficultyDot({ difficulty }: { difficulty: string }) {
+  return (
+    <span className="inline-flex shrink-0 sm:hidden">
+      <span aria-hidden className={`size-2 rounded-full ${DIFFICULTY_DOT[difficulty] ?? "bg-muted"}`} />
+      <span className="sr-only">{difficulty}</span>
+    </span>
+  );
+}
+
 export function StatusPill({ status }: { status: string }) {
   return (
     <span

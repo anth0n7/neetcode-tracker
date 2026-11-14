@@ -171,8 +171,8 @@ export function TodayList({ items, solved, problems }: { items: ProblemRow[]; so
 
               <div className="mt-5 grid grid-cols-3 gap-2">
                 {RATING_BUTTONS.map((b) => (
-                  <button key={b.rating} type="button" onClick={() => void rate(item, b.rating)} className="btn py-2.5">
-                    {b.label} <kbd className="kbd">{b.key}</kbd>
+                  <button key={b.rating} type="button" onClick={() => void rate(item, b.rating)} className="btn px-2 py-2.5 text-center leading-tight">
+                    {b.label} <kbd className="kbd hidden sm:inline">{b.key}</kbd>
                   </button>
                 ))}
               </div>

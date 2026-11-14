@@ -6,7 +6,7 @@ import { formatShortDate } from "@/lib/problem-detail";
 import type { PatternGroup } from "@/lib/pattern-groups";
 import { DIFFICULTIES, filterProblems, STATUSES, toSearchString, type ProblemFilters } from "@/lib/problem-filters";
 import type { ProblemRow } from "@/lib/queries";
-import { DifficultyLabel, StatusPill } from "./ui/pills";
+import { DifficultyDot, DifficultyLabel, StatusPill } from "./ui/pills";
 import { ProgressBar } from "./ui/progress-bar";
 
 const ROW_GRID = "grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 sm:grid-cols-[minmax(0,1fr)_5.5rem_6.5rem_5rem]";
@@ -54,7 +54,7 @@ export function ProblemsTable({
 
   return (
     <>
-      <div className="sticky top-0 z-10 -mx-4 border-b border-line bg-canvas/85 px-4 py-3 backdrop-blur">
+      <div className="-mx-4 sm:sticky sm:top-0 sm:z-10 border-b border-line bg-canvas/85 px-4 py-3 backdrop-blur">
         <div className="grid gap-2 sm:grid-cols-[2fr_1fr_1fr_1fr]">
           <div className="relative">
             <svg
@@ -182,6 +182,7 @@ export function ProblemsTable({
                       {rows.map((p) => (
                         <li key={p.id} className={`${ROW_GRID} border-t border-line px-4 py-2.5 transition-colors first:border-t-0 hover:bg-subtle sm:first:border-t`}>
                           <div className="flex min-w-0 items-center gap-2">
+                            <DifficultyDot difficulty={p.difficulty} />
                             <Link href={`/problems/${p.id}`} className="truncate font-medium hover:text-accent">
                               {p.title}
                             </Link>
