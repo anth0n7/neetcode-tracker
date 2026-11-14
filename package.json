@@ -14,7 +14,8 @@
     "fetch:neetcode250": "tsx scripts/fetch-neetcode250.ts",
     "seed:dev": "DATABASE_PATH=data/dev.db tsx scripts/seed.ts data/fixture.json",
     "typecheck": "tsc --noEmit",
-    "check": "npm run lint && npm run typecheck && npm run build && npm test"
+    "check": "npm run lint && npm run typecheck && npm run build && npm test",
+    "spike:package": "next build && tsx scripts/package-spike.mts"
   },
   "dependencies": {
     "@libsql/client": "^0.18.0",
@@ -25,11 +26,13 @@
     "react-dom": "19.3.0"
   },
   "devDependencies": {
+    "@electron/packager": "^20.3.0",
     "@tailwindcss/turbopack": "4.3.3",
     "@types/node": "^22.20.5",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "drizzle-kit": "^0.31.11",
+    "electron": "^45.3.2",
     "eslint": "^9",
     "eslint-config-next": "16.4.6",
     "tailwindcss": "4.3.3",
