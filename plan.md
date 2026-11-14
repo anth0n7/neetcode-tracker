@@ -16,13 +16,14 @@ and how we work together is in [CLAUDE.md](CLAUDE.md). Tick boxes as stages land
 | n/a | Remove code comments, tighten docs | Done, merged to `main` (PR #2) |
 | 5 | Today screen | Done, merged (PR #2). `npm run check` now includes `next build`. Behaviour checked by hand in a browser |
 | 5b | Real data (fetch the 250 list) | Done, merged (PR #2). `data/neetcode250.json` has 250 entries (content and order checked by you) and is seeded into the real database (250 rows, safe to re-run) |
-| 6a | Problems list (branch `stage-6-problems`) | Built and committed. Filters run in the browser through one shared `filterProblems`, mirrored to the URL, bad URL values ignored |
-| 6b | Problem detail | Built, same branch and PR as 6a (separate commit). Insight editor, log form with early-rating warning, history with confirmed delete. Waiting for your browser check on the test database |
-| 6c | Routes and look (same branch, same PR) | Done in two commits. Commit 1: Problems is the home page, Today moved to `/today`, `/problems` redirects to `/`. Commit 2: redesign (refined table grouped by pattern with progress bars, shared style tokens, nav, Today and detail restyled). Screenshots checked in headless Chrome (light mode, wide and narrow); dark mode not seen. Waiting for your browser check on the test database |
-| 7 | Progress screen | |
+| 6a | Problems list | Done, merged (PR #3). Filters run in the browser through one shared `filterProblems`, mirrored to the URL, bad URL values ignored |
+| 6b | Problem detail | Done, merged (PR #3). Insight editor, log form with early-rating warning, history with confirmed delete |
+| 6c | Routes and look | Done, merged (PR #3). Commit 1: Problems is the home page, Today moved to `/today`, `/problems` redirects to `/`. Commit 2: redesign (refined table grouped by pattern with progress bars, shared style tokens, nav, Today and detail restyled). Screenshots checked in headless Chrome (light mode, wide and narrow); dark mode and phone widths under about 500px not seen |
+| 7 | Progress screen (branch `stage-7-progress`) | Done, PR open. Donut, attempts-per-day chart (plain SVG, no new dependency) and per-pattern bars. Totals share `groupByPattern` and `sumGroups` with the Problems screen. You checked it in a browser on the test database. Follow-up you asked for: make `getProgress` (API and Today) use `groupByPattern` so only one implementation of the counts remains |
+| 7b | UI polish (branch `ui-polish`) | Not started. From your review: Problems search bar scrolls away on mobile, difficulty not visible on mobile, dark mode background too dark |
 | 8 | Polish, running it as an app | |
 
-267 tests pass. The real database holds the 250 problems and no attempts. The dev
+289 tests pass (as of the last commit of PR #3). The real database holds the 250 problems and no attempts. The dev
 database holds 5 fake fixture problems.
 
 ## How we work (every stage)
@@ -129,7 +130,6 @@ From the spec's acceptance checklist:
 - **Next.js 16 differences.** `AGENTS.md` says this version differs from what I know, so I read the bundled docs in `node_modules/next/dist/docs/` before writing routes or pages.
 - **The UI is the least-tested layer.** We chose U1 (a): only the pure logic is tested, and the React wiring is checked by hand.
 - **Public repo.** No personal data, no `.env` files; commits use the GitHub noreply email.
-- **Unpushed work.** The comment cleanup is committed on `no-comments` but not pushed or merged. The old branch `sm2-scheduler` still exists locally and on the remote.
 
 ## Not in v1
 

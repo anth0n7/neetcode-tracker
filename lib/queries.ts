@@ -188,3 +188,20 @@ export async function getProgress(today: string, conn: Conn = db): Promise<Progr
 
   return { totals, patterns: [...byPattern.values()] };
 }
+
+export type DayAttempts = { date: string; attempts: number };
+
+export async function getAttemptsPerDay(today: string, conn: Conn = db): Promise<DayAttempts[]> {
+  const start = addDays(today, -6);
+  const rows = await conn
+    .select({ date: attempts.attemptedOn, n: count() })
+    .from(attempts)
+    .where(and(gte(attempts.attemptedOn, start), lte(attempts.attemptedOn, today)))
+    .groupBy(attempts.attemptedOn);
+
+  const perDate = new Map(rows.map((r) => [r.date, r.n]));
+  return Array.from({ length: 7 }, (_, i) => {
+    const date = addDays(start, i);
+    return { date, attempts: perDate.get(date) ?? 0 };
+  });
+}

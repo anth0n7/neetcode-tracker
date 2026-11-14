@@ -27,3 +27,18 @@ export function groupByPattern<T extends { pattern: string; status: string; due:
   }
   return [...groups.values()];
 }
+
+export type GroupTotals = Omit<PatternGroup<unknown>, "pattern" | "rows">;
+
+export function sumGroups(groups: Omit<PatternGroup<unknown>, "rows">[]): GroupTotals {
+  return groups.reduce<GroupTotals>(
+    (t, g) => ({
+      total: t.total + g.total,
+      solved: t.solved + g.solved,
+      inReview: t.inReview + g.inReview,
+      mastered: t.mastered + g.mastered,
+      due: t.due + g.due,
+    }),
+    { total: 0, solved: 0, inReview: 0, mastered: 0, due: 0 },
+  );
+}

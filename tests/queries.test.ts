@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { logAttempt, type Conn, type AttemptInput } from "@/lib/attempts";
-import { getDue, getProblem, getProgress, listProblems } from "@/lib/queries";
+import { getAttemptsPerDay, getDue, getProblem, getProgress, listProblems } from "@/lib/queries";
 import { day, makeProblem, TODAY, withRollback } from "./helpers";
 
 async function easyAt(tx: Conn, id: number, ...offsets: number[]) {
@@ -279,5 +279,50 @@ describe("getProgress", () => {
       const names = (await getProgress(TODAY, tx)).patterns.map((p) => p.pattern);
       expect(names.indexOf(first)).toBeGreaterThanOrEqual(0);
       expect(names.indexOf(first)).toBeLessThan(names.indexOf(second));
+    }));
+});
+
+describe("getAttemptsPerDay", () => {
+  it("returns the last 7 days oldest first, with 0 for days without attempts", () =>
+    withRollback(async (tx) => {
+      const id = await makeProblem(tx);
+      await logAttempt(id, attempt(-6, "easy"), tx);
+      await logAttempt(id, attempt(-3, "struggled"), tx);
+      await logAttempt(id, attempt(0, "needed_solution"), tx);
+
+      const days = await getAttemptsPerDay(TODAY, tx);
+      expect(days).toEqual([
+        { date: "2026-06-09", attempts: 1 },
+        { date: "2026-06-10", attempts: 0 },
+        { date: "2026-06-11", attempts: 0 },
+        { date: "2026-06-12", attempts: 1 },
+        { date: "2026-06-13", attempts: 0 },
+        { date: "2026-06-14", attempts: 0 },
+        { date: "2026-06-15", attempts: 1 },
+      ]);
+    }));
+
+  it("counts repeat attempts on the same day and ignores days outside the window", () =>
+    withRollback(async (tx) => {
+      const a = await makeProblem(tx);
+      const b = await makeProblem(tx);
+      await logAttempt(a, attempt(-1, "easy"), tx);
+      await logAttempt(a, attempt(-1, "needed_solution"), tx);
+      await logAttempt(b, attempt(-1, "easy"), tx);
+      await logAttempt(b, attempt(-7, "easy"), tx);
+      await logAttempt(b, attempt(1, "easy"), tx);
+
+      const days = await getAttemptsPerDay(TODAY, tx);
+      expect(days.map((d) => d.attempts)).toEqual([0, 0, 0, 0, 0, 3, 0]);
+    }));
+
+  it("adds up to the same number as attemptsLast7Days", () =>
+    withRollback(async (tx) => {
+      const id = await makeProblem(tx);
+      for (const o of [-8, -6, -2, -2, 0]) await logAttempt(id, attempt(o, "easy"), tx);
+
+      const total = (await getAttemptsPerDay(TODAY, tx)).reduce((n, d) => n + d.attempts, 0);
+      expect(total).toBe((await getProgress(TODAY, tx)).totals.attemptsLast7Days);
+      expect(total).toBe(4);
     }));
 });
