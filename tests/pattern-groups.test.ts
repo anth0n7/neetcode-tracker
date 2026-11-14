@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { logAttempt, type Conn } from "@/lib/attempts";
-import { groupByPattern } from "@/lib/pattern-groups";
+import { groupByPattern, sumGroups } from "@/lib/pattern-groups";
 import { getProgress, listProblems } from "@/lib/queries";
 import { day, makeProblem, TODAY, withRollback } from "./helpers";
 
@@ -69,5 +69,48 @@ describe("groupByPattern against the Progress numbers", () => {
         due: progress!.due,
       });
       expect(progress).toMatchObject({ total: 6, solved: 4, mastered: 2, due: 2 });
+    }));
+});
+
+describe("sumGroups", () => {
+  it("is all zeros for no groups", () => {
+    expect(sumGroups([])).toEqual({ total: 0, solved: 0, inReview: 0, mastered: 0, due: 0 });
+  });
+
+  it("adds each count across patterns", () => {
+    const groups = groupByPattern([
+      row(1, "Stack", "unsolved"),
+      row(2, "Stack", "in review", true),
+      row(3, "Trees", "mastered", true),
+      row(4, "Trees", "mastered"),
+      row(5, "Trees", "in review"),
+    ]);
+
+    expect(sumGroups(groups)).toEqual({ total: 5, solved: 4, inReview: 2, mastered: 2, due: 2 });
+  });
+
+  it("gives the same totals as getProgress for the same data", () =>
+    withRollback(async (tx: Conn) => {
+      const pattern = `T-Pattern-${Date.now()}`;
+      const ids: number[] = [];
+      for (let i = 0; i < 4; i++) ids.push(await makeProblem(tx, { pattern }));
+      const easyAt = async (id: number, ...offsets: number[]) => {
+        for (const o of offsets) {
+          await logAttempt(id, { rating: "easy", minutes: null, insight: null, attemptedOn: day(o) }, tx);
+        }
+      };
+      await easyAt(ids[1], -10);
+      await easyAt(ids[2], -33, -32, -26, -10);
+
+      const totals = sumGroups(groupByPattern(await listProblems({}, TODAY, tx)));
+      const progress = (await getProgress(TODAY, tx)).totals;
+
+      expect(totals).toMatchObject({
+        total: progress.problems,
+        solved: progress.solved,
+        mastered: progress.mastered,
+        due: progress.due,
+      });
+      expect(totals.inReview).toBe(totals.solved - totals.mastered);
     }));
 });

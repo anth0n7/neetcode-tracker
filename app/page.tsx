@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { connection } from "next/server";
-import { groupByPattern } from "@/lib/pattern-groups";
+import { groupByPattern, sumGroups } from "@/lib/pattern-groups";
 import { parseFilterParams } from "@/lib/problem-filters";
 import { listProblems } from "@/lib/queries";
 import { todayLocal } from "@/lib/today";
@@ -19,16 +19,7 @@ export default async function ProblemsPage({
   const patterns = groups.map((g) => g.pattern);
   const initialFilters = parseFilterParams(await searchParams, patterns);
 
-  const totals = groups.reduce(
-    (t, g) => ({
-      total: t.total + g.total,
-      solved: t.solved + g.solved,
-      inReview: t.inReview + g.inReview,
-      mastered: t.mastered + g.mastered,
-      due: t.due + g.due,
-    }),
-    { total: 0, solved: 0, inReview: 0, mastered: 0, due: 0 },
-  );
+  const totals = sumGroups(groups);
 
   return (
     <main className="mx-auto w-full max-w-5xl px-4 py-8">
