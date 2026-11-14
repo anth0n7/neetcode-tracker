@@ -2,9 +2,9 @@ import { spawnSync } from "node:child_process";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { Pool } from "pg";
+import { createClient } from "@libsql/client";
 import { afterAll, describe, expect, it } from "vitest";
-import { TEST_DATABASE_URL } from "./test-db";
+import { TEST_DATABASE_DIR } from "./test-db";
 
 const ROOT = process.cwd();
 const TSX = path.join(ROOT, "node_modules/.bin/tsx");
@@ -15,7 +15,6 @@ function runSeed(args: string[], extraEnv: Record<string, string> = {}) {
   const env = {
     ...process.env,
     NODE_ENV: "development" as const,
-    DATABASE_URL: TEST_DATABASE_URL,
     ...extraEnv,
   };
   const result = spawnSync(TSX, ["scripts/seed.ts", ...args], { cwd: ROOT, encoding: "utf8", env });
@@ -40,12 +39,12 @@ const entry = (overrides: Record<string, unknown> = {}) => ({
   ...overrides,
 });
 
-const db = new Pool({ connectionString: TEST_DATABASE_URL });
-afterAll(async () => {
-  await db.end();
+const db = createClient({ url: `file:${process.env.DATABASE_PATH}` });
+afterAll(() => {
+  db.close();
 });
 
-const count = async () => (await db.query("select count(*)::int as n from problems")).rows[0].n as number;
+const count = async () => Number((await db.execute("select count(*) as n from problems")).rows[0].n);
 
 describe("seeding the fixture into a throwaway database", () => {
   it("is safe to run twice: same rows, no duplicates", async () => {
@@ -55,28 +54,28 @@ describe("seeding the fixture into a throwaway database", () => {
     expect(runSeed(["data/fixture.json"]).code).toBe(0);
     expect(await count()).toBe(first);
 
-    const fixtureRows = await db.query("select count(*)::int as n from problems where id between 9001 and 9005");
-    expect(fixtureRows.rows[0].n).toBe(5);
+    const fixtureRows = await db.execute("select count(*) as n from problems where id between 9001 and 9005");
+    expect(Number(fixtureRows.rows[0].n)).toBe(5);
   }, SLOW);
 
   it("never overwrites your insight", async () => {
     runSeed(["data/fixture.json"]);
-    await db.query("update problems set insight = 'my own idea' where id = 9001");
+    await db.execute("update problems set insight = 'my own idea' where id = 9001");
 
     runSeed(["data/fixture.json"]);
 
-    const { rows } = await db.query("select insight from problems where id = 9001");
+    const { rows } = await db.execute("select insight from problems where id = 9001");
     expect(rows[0].insight).toBe("my own idea");
   }, SLOW);
 
   it("does update the seed fields when the file changes", async () => {
     runSeed(["data/fixture.json"]);
-    await db.query("update problems set title = 'edited by hand' where id = 9002");
-    expect((await db.query("select title from problems where id = 9002")).rows[0].title).toBe("edited by hand");
+    await db.execute("update problems set title = 'edited by hand' where id = 9002");
+    expect((await db.execute("select title from problems where id = 9002")).rows[0].title).toBe("edited by hand");
 
     runSeed(["data/fixture.json"]);
 
-    const { rows } = await db.query("select title from problems where id = 9002");
+    const { rows } = await db.execute("select title from problems where id = 9002");
     expect(rows[0].title).toBe("Fixture: Hashing B");
   }, SLOW);
 });
@@ -84,7 +83,7 @@ describe("seeding the fixture into a throwaway database", () => {
 describe("keeping fixture data out of the real database", () => {
   it("refuses to seed the fixture into a database that is not a throwaway one", async () => {
     const { code, output } = runSeed(["data/fixture.json"], {
-      DATABASE_URL: "postgres://test:test@localhost:5433/neetcode_tracker_not_a_real_db",
+      DATABASE_PATH: path.join(TEST_DATABASE_DIR, "not-a-throwaway.db"),
     });
     expect(code).not.toBe(0);
     expect(output).toContain("refusing to seed the fixture");

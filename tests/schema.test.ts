@@ -4,12 +4,12 @@ import { problems, reviewState } from "@/db/schema";
 import { db } from "@/lib/db";
 
 async function reviewStateColumns() {
-  const { rows } = await db.execute(sql`
-    select column_name as name, data_type as type, is_nullable as nullable
-    from information_schema.columns
-    where table_schema = 'public' and table_name = 'review_state'
-    order by ordinal_position`);
-  return rows as { name: string; type: string; nullable: "YES" | "NO" }[];
+  const { rows } = await db.run(sql`pragma table_info('review_state')`);
+  return rows.map((r) => ({
+    name: String(r.name),
+    type: String(r.type).toLowerCase(),
+    nullable: r.notnull ? ("NO" as const) : ("YES" as const),
+  }));
 }
 
 describe("review_state after the SM-2 migration", () => {
@@ -28,15 +28,13 @@ describe("review_state after the SM-2 migration", () => {
 
   it("always has a next review date (nothing is ever retired)", async () => {
     const cols = Object.fromEntries((await reviewStateColumns()).map((c) => [c.name, c]));
-    expect(cols.next_review).toMatchObject({ type: "date", nullable: "NO" });
+    expect(cols.next_review).toMatchObject({ type: "text", nullable: "NO" });
   });
 
   it("has no leftover check constraint about the old status values", async () => {
-    const { rows } = await db.execute(sql`
-      select pg_get_constraintdef(c.oid) as definition
-      from pg_constraint c join pg_class t on t.oid = c.conrelid
-      where t.relname = 'review_state' and c.contype = 'c'`);
-    expect(rows.map((r) => String(r.definition)).join(" ")).not.toMatch(/retired|status/);
+    const { rows } = await db.run(sql`select sql as definition from sqlite_master where name = 'review_state'`);
+    expect(rows).toHaveLength(1);
+    expect(String(rows[0].definition)).not.toMatch(/retired|status/);
   });
 
   it("accepts a row in the new shape", async () => {
@@ -52,7 +50,7 @@ describe("review_state after the SM-2 migration", () => {
       lastReviewed: "2026-01-02",
       timesReviewed: 2,
     });
-    const { rows } = await db.execute(sql`select ease_factor, repetitions from review_state where problem_id = 1`);
+    const { rows } = await db.run(sql`select ease_factor, repetitions from review_state where problem_id = 1`);
     expect(rows[0]).toMatchObject({ ease_factor: 246, repetitions: 2 });
   });
 
@@ -61,12 +59,12 @@ describe("review_state after the SM-2 migration", () => {
       id: 1, position: 1, title: "T", slug: "t", url: "https://example.com", pattern: "P", difficulty: "Easy",
     });
     const error = await db
-      .execute(
+      .run(
         sql`insert into review_state (problem_id, interval_days, ease_factor, repetitions, last_reviewed, times_reviewed)
             values (1, 1, 250, 0, '2026-01-01', 1)`,
       )
       .catch((e) => e);
-    expect(String(error?.cause?.message ?? "")).toMatch(/null value in column "next_review"/);
+    expect(String(error?.cause?.message ?? "")).toMatch(/NOT NULL constraint failed: review_state\.next_review/);
   });
 });
 

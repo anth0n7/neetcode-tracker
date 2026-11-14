@@ -1,13 +1,18 @@
+import { realpathSync } from "node:fs";
+import path from "node:path";
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { attempts, problems, reviewState } from "@/db/schema";
 import { logAttempt } from "@/lib/attempts";
 import { db } from "@/lib/db";
+import { TEST_DATABASE_DIR } from "./test-db";
 
 describe("the test database", () => {
   it("is the test database, and logAttempt saves an attempt and its schedule", async () => {
-    const { rows } = await db.execute(sql`select current_database() as name`);
-    expect(rows[0].name).toBe("neetcode_tracker_test");
+    const { rows } = await db.run(sql`pragma database_list`);
+    const file = realpathSync(String(rows[0].file));
+    expect(path.dirname(file)).toBe(realpathSync(TEST_DATABASE_DIR));
+    expect(file).toMatch(/\.test\.db$/);
 
     await db.insert(problems).values({
       id: 1,

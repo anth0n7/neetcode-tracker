@@ -20,8 +20,8 @@ A single-user web app that tracks the NeetCode 250 problem list and shows each d
 | Layer | Choice |
 |---|---|
 | Framework | Next.js (App Router) + TypeScript |
-| Database | Local PostgreSQL 17 (Homebrew), database `neetcode_tracker` |
-| Queries | Drizzle ORM on node-postgres (`pg`) |
+| Database | SQLite, one file per database (see Running it) |
+| Queries | Drizzle ORM on libsql (`@libsql/client`) |
 | Styling | Tailwind CSS |
 | Tests | Vitest |
 
@@ -31,14 +31,17 @@ A single-user web app that tracks the NeetCode 250 problem list and shows each d
 /app                        pages: /, /problems, /problems/[id], /progress
 /app/api                    route handlers
 /lib/scheduler.ts           pure scheduling functions (no DB, no clock)
-/lib/db.ts                  connection and queries
+/lib/db.ts                  opens the SQLite file named by DATABASE_PATH
+/lib/startup.ts             backup, migrations and problem upsert, run once when the server starts
+/lib/backup.ts              daily database backups
+/instrumentation.ts         calls lib/startup.ts when the Next server starts
 /lib/config.ts              constants (DUE_LIMIT = 10)
 /db/schema.ts               table definitions
 /data/neetcode250.json      real seed file (committed)
 /data/fixture.json          ~5-problem fixture for development
 /scripts/fetch-neetcode250.ts  one-time pull from neetcode.io
 /scripts/seed.ts            upserts a seed file into the database
-/scripts/install-launchd.sh writes the login agent
+/scripts/fill-sandbox.ts    rebuilds the sandbox database for manual checks
 /tests/scheduler.test.ts
 /docs/SPEC.md               this file
 ```
@@ -49,23 +52,33 @@ A single-user web app that tracks the NeetCode 250 problem list and shows each d
 
 ## Running it
 
-### Two databases
+### Databases
 
-| Database | Env file | Used by | Seeded with |
+Every database is one SQLite file. `DATABASE_PATH` names it; there is no default, so nothing opens the real database by accident. The npm scripts set it.
+
+| Database | File | Used by | Problems |
 |---|---|---|---|
-| `neetcode_tracker` | `.env.local` | `npm start`, `npm run deploy`, `npm run seed` | `data/neetcode250.json` only |
-| `neetcode_tracker_dev` | `.env.development.local` | `npm run dev`, `npm run db:migrate:dev`, `npm run seed:dev` | `data/fixture.json` |
+| Real | `~/Library/Application Support/NeetCode Tracker/neetcode-tracker.db` | `npm start` (port 3000) | `data/neetcode250.json` |
+| Dev | `data/dev.db` (git-ignored) | `npm run dev` (port 3001), `npm run seed:dev` | `data/fixture.json` |
+| Sandbox | `data/sandbox.db` (git-ignored) | `npm run start:sandbox` (port 3002); rebuilt by `npm run sandbox:fill` with sample attempts | `data/neetcode250.json` |
+| Tests | a `*.test.db` file per test file in the temp folder | `npm test` | per test |
 
-Next.js loads `.env.development.local` over `.env.local` under `next dev`. Scripts that run outside Next (seed, Drizzle migrations) load the env file explicitly with `@next/env`'s `loadEnvConfig(dir, dev)`, so `seed:dev` and `db:migrate:dev` pass `dev = true`. `seed.ts` refuses to load `fixture.json` unless the target database name ends in `_dev` or `_test` (the automated tests' database), so fixture rows can never reach the real database.
+Manual checks (curl, browser) use the sandbox database, never the real one. The real file is not created until the app is finished and in use.
+
+### At startup
+
+When the server starts, `instrumentation.ts` calls `lib/startup.ts`, which:
+
+1. Backs up the file into a `backups` folder beside it (`<name>-YYYY-MM-DD.db`), at most once a day, keeping the 7 newest. If a migration is pending it always takes a fresh backup first. An empty file is not backed up.
+2. Applies any pending migrations from `/drizzle`.
+3. Upserts the problem list (`SEED_FILE`, default `data/neetcode250.json`). The fixture may only go into `dev.db` or a `*.test.db` file, so fixture rows can never reach the real database.
 
 ### Steps
 
-1. **One-time setup.** Run `createdb neetcode_tracker` and `createdb neetcode_tracker_dev`. Put `DATABASE_URL=postgres://localhost:5432/neetcode_tracker` in `.env.local` and `DATABASE_URL=postgres://localhost:5432/neetcode_tracker_dev` in `.env.development.local`. Run migrations on both, then `npm run seed:dev` (fixture). Seed the real database only once the real list exists.
-2. **Development.** `npm run dev` runs `next dev -p 3001 -H 127.0.0.1`, so it never collides with the always-running app on 3000.
-3. **Deploy.** `npm run deploy` runs migrations on the real database, `next build`, then `launchctl kickstart -k gui/$UID/<label>` to restart the agent.
-4. **Auto-start.** `scripts/install-launchd.sh` writes a LaunchAgent into `~/Library/LaunchAgents` that runs `npm start` at login with `KeepAlive`. It uses absolute paths (`/usr/local/bin/node` and the project directory) because launchd does not load the shell profile. Logs go to `~/Library/Logs/neetcode-tracker/`. Postgres is already a Homebrew launchd service, so it is up at login.
-5. **Localhost only.** `npm start` runs `next start -p 3000 -H 127.0.0.1` (the agent calls `npm start`, so it inherits this). Without that flag, `next start` listens on all interfaces. The app has no login and has delete endpoints, so anyone on the same network could change the data.
-6. **App feel.** A web app manifest and icon, so Chrome's *Install app* or Safari's *Add to Dock* opens it in its own window.
+1. **Development.** `npm run dev` runs `next dev -p 3001 -H 127.0.0.1` against `data/dev.db`. The file and its tables are created on first start.
+2. **Manual checks.** `npm run sandbox:fill`, then `npm run build` and `npm run start:sandbox`.
+3. **Localhost only.** Every server binds to `127.0.0.1`. Without that flag, `next start` listens on all interfaces, and the app has no login and has delete endpoints.
+4. **Desktop app.** Stages 9 to 11 in `plan.md` wrap the app in Electron.
 
 ---
 
@@ -151,7 +164,7 @@ The list is never written from memory.
    }
    ```
 3. `scripts/seed.ts <file>` upserts by id; re-running never duplicates rows or touches attempts or insights.
-4. It fails if any entry is missing a field. For `neetcode250.json` it also fails unless there are exactly 250 entries. `data/fixture.json` (~5 problems) is exempt from the count, is used for development until the real list exists, and may only be seeded into a throwaway database (a name ending in `_dev` or `_test`).
+4. It fails if any entry is missing a field. For `neetcode250.json` it also fails unless there are exactly 250 entries. `data/fixture.json` (~5 problems) is exempt from the count, is used for development until the real list exists, and may only be seeded into a throwaway database (`dev.db` or a `*.test.db` file).
 
 ---
 
@@ -308,7 +321,7 @@ Explain the plan before each stage; check each before starting the next. Git fol
 5. **Today screen.** Due list, Reveal, rating buttons, Undo toast. *Check:* rating removes the row and updates its date; Undo restores it.
 6. **Problems and detail.** Filters, search, history with delete, insight editing, early-Easy warning. *Check:* filters combine correctly.
 7. **Progress.** Per-pattern counts. *Check:* totals match the Problems screen.
-8. **Real data and polish.** Fetch and verify the 250 list, seed it, empty states, errors, `install-launchd.sh`, `npm run deploy`, logging, manifest, README. *Check:* a fresh clone runs by following the README.
+8. **SQLite, then a desktop app.** Switch to SQLite (stage 8), then an Electron spike, the Electron app, error pages and README (stages 9 to 11; see `plan.md`). *Check:* a fresh clone runs by following the README.
 
 **SM-2 switch (done, between stages 4 and 5).** Scheduler tests came first, then `lib/scheduler.ts`, then new migrations `0001` (SM-2 columns) and `0002` (value checks), never editing `0000`; `attempts.ts`, `queries.ts`, validation and the API moved to the new shape; the stage 4 curl check re-run against a production build and matching the worked example. See `plan.md`.
 
@@ -340,24 +353,24 @@ Explain the plan before each stage; check each before starting the next. Git fol
 - `tests/routes.test.ts`: calls the real route handlers; creates its three throwaway problems before each test.
 - `tests/seed.test.ts`: runs the seed script as a command against the test database.
 - `tests/test-database.test.ts`: a small end-to-end example proving the test database, migrations and per-test reset work.
+- `tests/backup.test.ts`, `startup.test.ts`, `foreign-keys.test.ts`: daily backups, the startup steps, and foreign key enforcement.
 - `tests/schema.test.ts`: the shape of `review_state` after the migrations (columns, required fields, no `status`) and its two check constraints.
 - `tests/api-shape.test.ts`: the ease factor shown to API clients as a decimal.
 
 ### Test database
 
-Tests never touch the dev or real database. They use a throwaway Postgres 17 in Docker (`docker-compose.test.yml`): port 5433, bound to 127.0.0.1, storage in memory (tmpfs), so stopping it wipes everything.
+Tests never touch the dev, sandbox or real database. Each test file gets its own throwaway SQLite file in a temp folder, deleted when the run ends.
 
-- `tests/test-db.ts` holds the one allowed URL (`postgres://test:test@localhost:5433/neetcode_tracker_test`) and a guard that throws unless host, port and database name all match exactly. There is no environment variable to override it.
-- `tests/global-setup.ts` runs once: it checks the guard, confirms `current_database()`, and applies the migrations in `/drizzle`.
-- `tests/setup-env.ts` points `DATABASE_URL` at the test database for every test file (and re-checks the guard).
-- `tests/setup-db.ts` truncates every table in the `public` schema before every test.
+- `tests/test-db.ts` holds the test folder and a guard that throws unless the path is an absolute `*.test.db` file directly inside that folder.
+- `tests/global-setup.ts` empties the test folder before the run and removes it afterwards.
+- `tests/setup-env.ts` points `DATABASE_PATH` at a new test file for every test file (and re-checks the guard).
+- `tests/setup-db.ts` applies the migrations, then empties every table before every test.
 - No mocking of the database anywhere.
 
 ### Commands
 
-- `npm run check`: lint, then typecheck, then start the test database (`test:db:up`), then all tests; stops at the first failure. Needs Docker running.
-- `npm run test:db:up` / `npm run test:db:down`: start / stop (and wipe) the test database.
-- `npm test`: just the tests (the test database must already be up).
+- `npm run check`: lint, then typecheck, then `next build`, then all tests; stops at the first failure.
+- `npm test`: just the tests.
 
 ### Acceptance checklist
 
@@ -366,7 +379,7 @@ Tests never touch the dev or real database. They use a throwaway Postgres 17 in 
 - [ ] Deleting an attempt (Undo or history) restores the prior state; deleting the last one makes the problem unsolved.
 - [ ] Today shows only problems due today or earlier, most overdue first, Hard first on ties.
 - [ ] Progress totals match the Problems screen.
-- [ ] After a restart, the app is available at localhost:3000 without opening an editor.
+- [ ] The app opens from the Dock as its own window, with no editor or terminal open.
 - [ ] The app is not reachable from another device on the network (listens on 127.0.0.1 only).
 - [ ] The real database contains no fixture rows.
 - [ ] The README lets a fresh clone run the app.
