@@ -22,8 +22,8 @@ and how we work together is in [CLAUDE.md](CLAUDE.md). Tick boxes as stages land
 | 7 | Progress screen (branch `stage-7-progress`) | Done, merged (PR #4). Donut, attempts-per-day chart (plain SVG, no new dependency) and per-pattern bars. Totals share `groupByPattern` and `sumGroups` with the Problems screen. You checked it in a browser on the test database. The `getProgress` refactor (one implementation of the counts) was discussed and skipped for now |
 | 7b | UI polish | Done, merged (PR #5). Problems filter bar sticky on desktop only, difficulty dot on mobile rows, softer dark palette, Today rating buttons no longer cramped on mobile (shortcut badges hidden below `sm`). Checked in headless Chrome at 520px (dark) and wide; scrolling behaviour and widths under 500px not seen |
 | 8 | Switch to SQLite (branch `stage-8-sqlite`) | Done, PR open. `npm run check` passes (306 tests); checked by hand on the sandbox and dev databases |
-| 9 | Electron spike (throwaway branch) | |
-| 10 | The Electron app | |
+| 9 | Electron spike (branch `stage-9-electron-spike`, not merged) | Done. All four pass criteria met, no fallbacks needed; you checked the window by hand |
+| 10 | The Electron app (branch `stage-10-electron`) | Done, PR open. Installed in /Applications and checked in trial mode; the real database is not created yet |
 | 11 | Error pages and README | |
 
 289 tests pass (as of the last commit of PR #3). The real database holds the 250 problems and no attempts. The dev
@@ -114,7 +114,7 @@ Goal: a "NeetCode Tracker" desktop app for one person on this Mac. SQLite instea
 
 - Driver `@libsql/client` on Drizzle 0.45. Postgres is removed completely (`pg`, the Docker test database, the old migrations). SQLite starts from one baseline migration.
 - `DATABASE_PATH` (required, no default) names the SQLite file. Four files:
-  - Real: `~/Library/Application Support/NeetCode Tracker/neetcode-tracker.db` (`npm start`). Not created until the whole app is finished.
+  - Real: `~/Library/Application Support/NeetCode Tracker/data/neetcode-tracker.db` (`npm start`). Not created until the whole app is finished.
   - Dev: `data/dev.db`, git-ignored, 5 fixture problems (`npm run dev`).
   - Sandbox: `data/sandbox.db`, git-ignored, for manual checks. `npm run sandbox:fill` rebuilds it with the 250 problems and sample attempts; `npm run start:sandbox` serves it on port 3002.
   - Tests: one `*.test.db` temp file per test file, deleted afterwards, behind a guard that refuses anything else.
@@ -132,7 +132,15 @@ Passes only if all four work: a double-click opens a window; Problems, Today and
 
 ### Stage 10: The Electron app
 
-Code in `electron/`, sharing the one `package.json`. App icon. One command builds the app and replaces the copy in `/Applications`. A database-path override so the app can be tried from the terminal against the sandbox file. Development stays `npm run dev` in a browser plus `npm run check`.
+Code in `electron/`, sharing the one `package.json`. Decisions made:
+- Real database at `~/Library/Application Support/NeetCode Tracker/data/neetcode-tracker.db` (a `data` subfolder, away from Chromium's own files). `npm start` uses the same file.
+- Icon: option C, a progress ring around an N (`electron/icon.svg`, built into `electron/icon.icns` by `scripts/make-icon.sh`).
+- Standard Mac menu, fixed window size, one copy at a time, links to other sites open in the browser.
+- `npm run app:install` packages, checks the contents and replaces `/Applications/NeetCode Tracker.app`. Packaging is not part of `npm run check`.
+- `npm run app:sandbox` opens the installed app on a trial copy of `data/sandbox.db` in `~/Library/Application Support/NeetCode Tracker/trial/` (macOS blocks a rebuilt app from reading `~/Documents` until approved again). The installed app is not opened normally (which creates the real database) until the whole app is finished.
+- After this stage works: delete the spike's data folder, `dist/` leftovers and the local spike branch (ask first).
+
+Tests first for the database-path and link rules. The window itself is checked by hand.
 
 ### Stage 11: Error pages and README
 

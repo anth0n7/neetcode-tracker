@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "DATABASE_PATH=data/dev.db SEED_FILE=data/fixture.json next dev -p 3001 -H 127.0.0.1",
     "build": "next build",
-    "start": "DATABASE_PATH=\"$HOME/Library/Application Support/NeetCode Tracker/neetcode-tracker.db\" next start -p 3000 -H 127.0.0.1",
+    "start": "DATABASE_PATH=\"$HOME/Library/Application Support/NeetCode Tracker/data/neetcode-tracker.db\" next start -p 3000 -H 127.0.0.1",
     "start:sandbox": "DATABASE_PATH=data/sandbox.db next start -p 3002 -H 127.0.0.1",
     "sandbox:fill": "tsx scripts/fill-sandbox.ts",
     "lint": "eslint",
@@ -14,7 +14,10 @@
     "fetch:neetcode250": "tsx scripts/fetch-neetcode250.ts",
     "seed:dev": "DATABASE_PATH=data/dev.db tsx scripts/seed.ts data/fixture.json",
     "typecheck": "tsc --noEmit",
-    "check": "npm run lint && npm run typecheck && npm run build && npm test"
+    "check": "npm run lint && npm run typecheck && npm run build && npm test",
+    "app:package": "next build && tsx scripts/package-app.mts",
+    "app:install": "npm run app:package && scripts/install-app.sh",
+    "app:sandbox": "scripts/open-app-sandbox.sh"
   },
   "dependencies": {
     "@libsql/client": "^0.18.0",
@@ -25,11 +28,13 @@
     "react-dom": "19.3.0"
   },
   "devDependencies": {
+    "@electron/packager": "^20.3.0",
     "@tailwindcss/turbopack": "4.3.3",
     "@types/node": "^22.20.5",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "drizzle-kit": "^0.31.11",
+    "electron": "^45.3.2",
     "eslint": "^9",
     "eslint-config-next": "16.4.6",
     "tailwindcss": "4.3.3",

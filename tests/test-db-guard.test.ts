@@ -17,7 +17,7 @@ describe("assertTestDatabasePath", () => {
     ["the sandbox database", path.resolve("data/sandbox.db")],
     [
       "the real database",
-      path.join(process.env.HOME ?? "/Users/someone", "Library/Application Support/NeetCode Tracker/neetcode-tracker.db"),
+      path.join(process.env.HOME ?? "/Users/someone", "Library/Application Support/NeetCode Tracker/data/neetcode-tracker.db"),
     ],
     ["a test-named file outside the test folder", path.resolve("data/x.test.db")],
     ["a file in a subfolder of the test folder", path.join(TEST_DATABASE_DIR, "nested", "x.test.db")],
