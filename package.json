@@ -13,10 +13,10 @@
     "db:generate": "drizzle-kit generate",
     "fetch:neetcode250": "tsx scripts/fetch-neetcode250.ts",
     "seed:dev": "DATABASE_PATH=data/dev.db tsx scripts/seed.ts data/fixture.json",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "next typegen && tsc --noEmit",
     "check": "npm run lint && npm run typecheck && npm run build && npm test",
     "app:package": "next build && tsx scripts/package-app.mts",
-    "app:install": "npm run app:package && scripts/install-app.sh",
+    "app:install": "scripts/install-app.sh --check-only && npm run app:package && scripts/install-app.sh",
     "app:sandbox": "scripts/open-app-sandbox.sh"
   },
   "dependencies": {
