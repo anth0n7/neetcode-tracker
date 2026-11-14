@@ -1,8 +1,8 @@
 # Rules
 
 ## Commands
-- `npm run check` — lint, typecheck, tests
-- `npm run test:db:up` — start test Postgres (port 5433); `npm run test:db:down` stops and wipes it
+- `npm run check` — lint, typecheck, build, tests
+- `npm run sandbox:fill` — rebuild the sandbox database (250 problems plus sample attempts); `npm run start:sandbox` serves it on port 3002
 - `npm run dev` — dev server
 
 ## Plan
@@ -27,7 +27,7 @@ Current work is tracked in plan.md. Read it at the start of each session, do onl
 - If `check` fails on something I didn't touch, tell me instead of fixing it.
 - Bug fixes: write a test that reproduces it first. New features: write tests first.
 - Never edit, skip, or delete a test to make it pass. Tell me if a test looks wrong.
-- Tests use the real test Postgres, never mocks and never the dev DB.
+- Tests use a real throwaway SQLite file, never mocks and never the dev, sandbox or real database.
 - Don't claim success without evidence. Say what you could not verify.
 
 ## Git
@@ -48,7 +48,7 @@ Current work is tracked in plan.md. Read it at the start of each session, do onl
 - Use specific value assertions. Avoid weak checks like `toBeDefined()` or `toBeTruthy()` on their own.
 - The scheduler (SM-2) is the exception: go thorough, including first review, failed review, the 1.3 ease floor, and same-day repeat reviews.
 - Never mock the thing being tested.
-- Tests run only against the throwaway Docker Postgres. Never touch any other database.
+- Tests run only against throwaway SQLite files in the temp folder. Never touch any other database.
 - Run `npm run check` before calling any task done. Commit only when it's green.
 
 ## Comments

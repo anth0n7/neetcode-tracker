@@ -1,65 +1,62 @@
 {
-  "id": "cb4f292f-eef2-476f-9ae3-1c2d003a8edb",
+  "version": "6",
+  "dialect": "sqlite",
+  "id": "0e9528a0-e91e-4e16-a3c1-4d48adaec639",
   "prevId": "00000000-0000-0000-0000-000000000000",
-  "version": "7",
-  "dialect": "postgresql",
   "tables": {
-    "public.attempts": {
+    "attempts": {
       "name": "attempts",
-      "schema": "",
       "columns": {
         "id": {
           "name": "id",
-          "type": "serial",
+          "type": "integer",
           "primaryKey": true,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": true
         },
         "problem_id": {
           "name": "problem_id",
           "type": "integer",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "attempted_on": {
           "name": "attempted_on",
-          "type": "date",
+          "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "rating": {
           "name": "rating",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "minutes": {
           "name": "minutes",
           "type": "integer",
           "primaryKey": false,
-          "notNull": false
+          "notNull": false,
+          "autoincrement": false
         },
         "insight": {
           "name": "insight",
           "type": "text",
           "primaryKey": false,
-          "notNull": false
+          "notNull": false,
+          "autoincrement": false
         }
       },
       "indexes": {
         "attempts_problem_id_idx": {
           "name": "attempts_problem_id_idx",
           "columns": [
-            {
-              "expression": "problem_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
+            "problem_id"
           ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
+          "isUnique": false
         }
       },
       "foreignKeys": {
@@ -79,145 +76,152 @@
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
-      "policies": {},
       "checkConstraints": {
         "attempts_rating_check": {
           "name": "attempts_rating_check",
           "value": "\"attempts\".\"rating\" in ('easy','struggled','needed_solution')"
         }
-      },
-      "isRLSEnabled": false
+      }
     },
-    "public.problems": {
+    "problems": {
       "name": "problems",
-      "schema": "",
       "columns": {
         "id": {
           "name": "id",
           "type": "integer",
           "primaryKey": true,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "position": {
           "name": "position",
           "type": "integer",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "title": {
           "name": "title",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "slug": {
           "name": "slug",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "url": {
           "name": "url",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "pattern": {
           "name": "pattern",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "difficulty": {
           "name": "difficulty",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "insight": {
           "name": "insight",
           "type": "text",
           "primaryKey": false,
-          "notNull": false
+          "notNull": false,
+          "autoincrement": false
         }
       },
-      "indexes": {},
-      "foreignKeys": {},
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
+      "indexes": {
         "problems_slug_unique": {
           "name": "problems_slug_unique",
-          "nullsNotDistinct": false,
           "columns": [
             "slug"
-          ]
+          ],
+          "isUnique": true
         }
       },
-      "policies": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
       "checkConstraints": {
         "problems_difficulty_check": {
           "name": "problems_difficulty_check",
           "value": "\"problems\".\"difficulty\" in ('Easy','Medium','Hard')"
         }
-      },
-      "isRLSEnabled": false
+      }
     },
-    "public.review_state": {
+    "review_state": {
       "name": "review_state",
-      "schema": "",
       "columns": {
         "problem_id": {
           "name": "problem_id",
           "type": "integer",
           "primaryKey": true,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "interval_days": {
           "name": "interval_days",
           "type": "integer",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
+        },
+        "ease_factor": {
+          "name": "ease_factor",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "repetitions": {
+          "name": "repetitions",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
         },
         "next_review": {
           "name": "next_review",
-          "type": "date",
+          "type": "text",
           "primaryKey": false,
-          "notNull": false
+          "notNull": true,
+          "autoincrement": false
         },
         "last_reviewed": {
           "name": "last_reviewed",
-          "type": "date",
+          "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "times_reviewed": {
           "name": "times_reviewed",
           "type": "integer",
           "primaryKey": false,
-          "notNull": true
-        },
-        "status": {
-          "name": "status",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         }
       },
       "indexes": {
         "review_state_next_review_idx": {
           "name": "review_state_next_review_idx",
           "columns": [
-            {
-              "expression": "next_review",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
+            "next_review"
           ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
+          "isUnique": false
         }
       },
       "foreignKeys": {
@@ -237,25 +241,26 @@
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
-      "policies": {},
       "checkConstraints": {
-        "review_state_status_check": {
-          "name": "review_state_status_check",
-          "value": "\"review_state\".\"status\" in ('in_review','mastered','retired')"
+        "review_state_ease_factor_check": {
+          "name": "review_state_ease_factor_check",
+          "value": "\"review_state\".\"ease_factor\" >= 130"
+        },
+        "review_state_repetitions_check": {
+          "name": "review_state_repetitions_check",
+          "value": "\"review_state\".\"repetitions\" >= 0"
         }
-      },
-      "isRLSEnabled": false
+      }
     }
   },
-  "enums": {},
-  "schemas": {},
-  "sequences": {},
-  "roles": {},
-  "policies": {},
   "views": {},
+  "enums": {},
   "_meta": {
-    "columns": {},
     "schemas": {},
-    "tables": {}
+    "tables": {},
+    "columns": {}
+  },
+  "internal": {
+    "indexes": {}
   }
 }

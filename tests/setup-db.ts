@@ -1,17 +1,24 @@
-import { Pool } from "pg";
+import { rmSync } from "node:fs";
+import { createClient } from "@libsql/client";
+import { drizzle } from "drizzle-orm/libsql";
+import { migrate } from "drizzle-orm/libsql/migrator";
 import { afterAll, beforeEach } from "vitest";
-import { assertTestDatabaseUrl, TEST_DATABASE_URL } from "./test-db";
+import { assertTestDatabasePath } from "./test-db";
 
-assertTestDatabaseUrl(TEST_DATABASE_URL);
-const pool = new Pool({ connectionString: TEST_DATABASE_URL, max: 1 });
+const file = process.env.DATABASE_PATH;
+assertTestDatabasePath(file);
+const client = createClient({ url: `file:${file}` });
+
+await migrate(drizzle(client), { migrationsFolder: "./drizzle" });
 
 beforeEach(async () => {
-  const { rows } = await pool.query("select tablename from pg_tables where schemaname = 'public'");
-  if (rows.length === 0) return;
-  const tables = rows.map((r) => `"${r.tablename}"`).join(", ");
-  await pool.query(`TRUNCATE ${tables} RESTART IDENTITY CASCADE`);
+  await client.batch(
+    ["delete from review_state", "delete from attempts", "delete from problems", "delete from sqlite_sequence"],
+    "write",
+  );
 });
 
-afterAll(async () => {
-  await pool.end();
+afterAll(() => {
+  client.close();
+  rmSync(file, { force: true });
 });

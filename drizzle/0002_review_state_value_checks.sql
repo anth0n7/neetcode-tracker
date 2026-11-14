@@ -1,2 +1,0 @@
-ALTER TABLE "review_state" ADD CONSTRAINT "review_state_ease_factor_check" CHECK ("review_state"."ease_factor" >= 130);--> statement-breakpoint
-ALTER TABLE "review_state" ADD CONSTRAINT "review_state_repetitions_check" CHECK ("review_state"."repetitions" >= 0);

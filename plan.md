@@ -19,9 +19,12 @@ and how we work together is in [CLAUDE.md](CLAUDE.md). Tick boxes as stages land
 | 6a | Problems list | Done, merged (PR #3). Filters run in the browser through one shared `filterProblems`, mirrored to the URL, bad URL values ignored |
 | 6b | Problem detail | Done, merged (PR #3). Insight editor, log form with early-rating warning, history with confirmed delete |
 | 6c | Routes and look | Done, merged (PR #3). Commit 1: Problems is the home page, Today moved to `/today`, `/problems` redirects to `/`. Commit 2: redesign (refined table grouped by pattern with progress bars, shared style tokens, nav, Today and detail restyled). Screenshots checked in headless Chrome (light mode, wide and narrow); dark mode and phone widths under about 500px not seen |
-| 7 | Progress screen (branch `stage-7-progress`) | Done, merged (PR #4). Donut, attempts-per-day chart (plain SVG, no new dependency) and per-pattern bars. Totals share `groupByPattern` and `sumGroups` with the Problems screen. You checked it in a browser on the test database. Follow-up you asked for: make `getProgress` (API and Today) use `groupByPattern` so only one implementation of the counts remains |
-| 7b | UI polish (branch `ui-polish`) | Done, PR open. Problems filter bar sticky on desktop only, difficulty dot on mobile rows, softer dark palette, Today rating buttons no longer cramped on mobile (shortcut badges hidden below `sm`). Checked in headless Chrome at 520px (dark) and wide; scrolling behaviour and widths under 500px not seen |
-| 8 | Polish, running it as an app | |
+| 7 | Progress screen (branch `stage-7-progress`) | Done, merged (PR #4). Donut, attempts-per-day chart (plain SVG, no new dependency) and per-pattern bars. Totals share `groupByPattern` and `sumGroups` with the Problems screen. You checked it in a browser on the test database. The `getProgress` refactor (one implementation of the counts) was discussed and skipped for now |
+| 7b | UI polish | Done, merged (PR #5). Problems filter bar sticky on desktop only, difficulty dot on mobile rows, softer dark palette, Today rating buttons no longer cramped on mobile (shortcut badges hidden below `sm`). Checked in headless Chrome at 520px (dark) and wide; scrolling behaviour and widths under 500px not seen |
+| 8 | Switch to SQLite (branch `stage-8-sqlite`) | Done, PR open. `npm run check` passes (306 tests); checked by hand on the sandbox and dev databases |
+| 9 | Electron spike (throwaway branch) | |
+| 10 | The Electron app | |
+| 11 | Error pages and README | |
 
 289 tests pass (as of the last commit of PR #3). The real database holds the 250 problems and no attempts. The dev
 database holds 5 fake fixture problems.
@@ -103,14 +106,39 @@ Per-pattern bars (solved, mastered, due), the last-7-days attempt count, overall
 Tests first: totals on this screen equal the Problems screen's counts for the same data (one shared query, so they cannot drift).
 Check: totals match the Problems screen with real data.
 
-## Stage 8: Polish and running it as an app
+## Stages 8 to 11: a standalone desktop app (replaces the old Stage 8)
 
-- Empty states and readable error messages.
-- `npm run deploy` (migrate, build, restart) and `scripts/install-launchd.sh` (starts at login, restarts on crash, absolute paths, logs in `~/Library/Logs/neetcode-tracker/`).
-- Web app manifest and icon so it installs as its own window.
-- README with setup steps that a fresh clone can follow.
+Goal: a "NeetCode Tracker" desktop app for one person on this Mac. SQLite instead of Postgres, wrapped in Electron. No phone use, code signing, auto-update or start at login. One window that quits when closed. Dropped from the old Stage 8: launchd, `npm run deploy`, the web app manifest.
 
-Check: restart the Mac and the app is at `localhost:3000` without opening an editor; it is not reachable from another device; the real database has no fixture rows; a fresh clone runs by following the README (I will try this in an empty folder).
+### Stage 8: Switch to SQLite (still a normal Next app in the browser)
+
+- Driver `@libsql/client` on Drizzle 0.45. Postgres is removed completely (`pg`, the Docker test database, the old migrations). SQLite starts from one baseline migration.
+- `DATABASE_PATH` (required, no default) names the SQLite file. Four files:
+  - Real: `~/Library/Application Support/NeetCode Tracker/neetcode-tracker.db` (`npm start`). Not created until the whole app is finished.
+  - Dev: `data/dev.db`, git-ignored, 5 fixture problems (`npm run dev`).
+  - Sandbox: `data/sandbox.db`, git-ignored, for manual checks. `npm run sandbox:fill` rebuilds it with the 250 problems and sample attempts; `npm run start:sandbox` serves it on port 3002.
+  - Tests: one `*.test.db` temp file per test file, deleted afterwards, behind a guard that refuses anything else.
+- At startup (`instrumentation.ts`): back up (at most daily, keep 7, always before a pending migration), apply migrations, upsert the problem list.
+- Tests first for backup, startup and foreign keys. Existing tests keep their expected values. Allowed test edits: the test setup, the database guard and its tests, and the database-specific parts of `tests/schema.test.ts`, `tests/seed.test.ts` and `tests/test-database.test.ts`, each shown for approval first.
+- Your Postgres databases are left alone. Dropping them is asked about again once the app is in use.
+
+Check: `npm run check` passes; the app shows the same numbers on the sandbox database as it did on Postgres.
+
+### Stage 9: Electron spike (throwaway branch, not merged)
+
+A standalone Next build, started by the app on a free `127.0.0.1` port, loaded in one window, built with plain `@electron/packager`.
+
+Passes only if all four work: a double-click opens a window; Problems, Today and Progress load; an attempt writes to a SQLite file outside the app bundle; migrations run on an empty file. Stop and report once the three fallbacks are used up (the alternative build flag, the local signing command, Electron Forge). If it fails, keep the SQLite app in the browser and return to the manifest idea.
+
+### Stage 10: The Electron app
+
+Code in `electron/`, sharing the one `package.json`. App icon. One command builds the app and replaces the copy in `/Applications`. A database-path override so the app can be tried from the terminal against the sandbox file. Development stays `npm run dev` in a browser plus `npm run check`.
+
+### Stage 11: Error pages and README
+
+Readable error pages and a README a fresh clone can follow. Real attempts start after this stage.
+
+Open risks (researched, not yet proven on a packaged app): whether the standalone build includes the native SQLite package; shipping the migrations folder and seed file with the app; whether an unsigned build launches on Apple Silicon without the local signing fallback.
 
 ## Definition of done (v1)
 
@@ -119,7 +147,7 @@ From the spec's acceptance checklist:
 - [ ] Logging an attempt creates the attempt and the right schedule; Undo and history deletes restore the prior state
 - [ ] Today shows only due problems, most overdue first, Hard first on ties
 - [ ] Progress totals match the Problems screen
-- [ ] After a restart the app is at `localhost:3000` with no editor open
+- [ ] The app opens from the Dock as its own window, with no editor or terminal open
 - [ ] Not reachable from another device; real database has no fixture rows
 - [ ] README lets a fresh clone run it
 - [ ] Logging an attempt takes under 10 seconds; opening the app each morning shows an accurate list

@@ -1,13 +1,17 @@
 import { eq, and } from "drizzle-orm";
-import type { NodePgQueryResultHKT } from "drizzle-orm/node-postgres";
-import type { PgDatabase } from "drizzle-orm/pg-core";
+import type { ResultSet } from "@libsql/client";
+import type { BaseSQLiteDatabase } from "drizzle-orm/sqlite-core";
 import * as schema from "@/db/schema";
 import { attempts, problems, reviewState } from "@/db/schema";
 import { db } from "./db";
 import { HttpError } from "./http";
 import { replay, type Rating, type ReviewState } from "./scheduler";
 
-export type Conn = PgDatabase<NodePgQueryResultHKT, typeof schema>;
+export type Conn = BaseSQLiteDatabase<"async", ResultSet, typeof schema>;
+
+// "immediate" takes SQLite's write lock before the first read, so two writes
+// to the same problem cannot interleave between reading and rebuilding its state.
+const WRITE = { behavior: "immediate" } as const;
 
 export type AttemptInput = {
   rating: Rating;
@@ -18,8 +22,8 @@ export type AttemptInput = {
 
 const notFound = (what: string) => new HttpError(404, `${what} not found`);
 
-async function lockProblem(tx: Conn, problemId: number): Promise<void> {
-  const rows = await tx.select({ id: problems.id }).from(problems).where(eq(problems.id, problemId)).for("update");
+async function requireProblem(tx: Conn, problemId: number): Promise<void> {
+  const rows = await tx.select({ id: problems.id }).from(problems).where(eq(problems.id, problemId));
   if (rows.length === 0) throw notFound("Problem");
 }
 
@@ -44,7 +48,7 @@ export async function logAttempt(
   conn: Conn = db,
 ): Promise<{ attemptId: number; reviewState: ReviewState | null }> {
   return conn.transaction(async (tx) => {
-    await lockProblem(tx, problemId);
+    await requireProblem(tx, problemId);
 
     const [saved] = await tx
       .insert(attempts)
@@ -62,7 +66,7 @@ export async function logAttempt(
     }
 
     return { attemptId: saved.id, reviewState: await rebuildReviewState(tx, problemId) };
-  });
+  }, WRITE);
 }
 
 export async function deleteAttempt(
@@ -71,7 +75,7 @@ export async function deleteAttempt(
   conn: Conn = db,
 ): Promise<{ reviewState: ReviewState | null }> {
   return conn.transaction(async (tx) => {
-    await lockProblem(tx, problemId);
+    await requireProblem(tx, problemId);
 
     const deleted = await tx
       .delete(attempts)
@@ -80,7 +84,7 @@ export async function deleteAttempt(
     if (deleted.length === 0) throw notFound("Attempt");
 
     return { reviewState: await rebuildReviewState(tx, problemId) };
-  });
+  }, WRITE);
 }
 
 export async function setInsight(problemId: number, insight: string | null, conn: Conn = db): Promise<void> {

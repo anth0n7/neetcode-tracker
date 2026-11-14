@@ -1,15 +1,7 @@
 import { sql } from "drizzle-orm";
-import {
-  check,
-  date,
-  index,
-  integer,
-  pgTable,
-  serial,
-  text,
-} from "drizzle-orm/pg-core";
+import { check, index, integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
 
-export const problems = pgTable(
+export const problems = sqliteTable(
   "problems",
   {
     id: integer("id").primaryKey(),
@@ -26,14 +18,14 @@ export const problems = pgTable(
   ],
 );
 
-export const attempts = pgTable(
+export const attempts = sqliteTable(
   "attempts",
   {
-    id: serial("id").primaryKey(),
+    id: integer("id").primaryKey({ autoIncrement: true }),
     problemId: integer("problem_id")
       .notNull()
       .references(() => problems.id),
-    attemptedOn: date("attempted_on", { mode: "string" }).notNull(),
+    attemptedOn: text("attempted_on").notNull(),
     rating: text("rating").notNull(),
     minutes: integer("minutes"),
     insight: text("insight"),
@@ -44,7 +36,7 @@ export const attempts = pgTable(
   ],
 );
 
-export const reviewState = pgTable(
+export const reviewState = sqliteTable(
   "review_state",
   {
     problemId: integer("problem_id")
@@ -53,8 +45,8 @@ export const reviewState = pgTable(
     intervalDays: integer("interval_days").notNull(),
     easeFactor: integer("ease_factor").notNull(),
     repetitions: integer("repetitions").notNull(),
-    nextReview: date("next_review", { mode: "string" }).notNull(),
-    lastReviewed: date("last_reviewed", { mode: "string" }).notNull(),
+    nextReview: text("next_review").notNull(),
+    lastReviewed: text("last_reviewed").notNull(),
     timesReviewed: integer("times_reviewed").notNull(),
   },
   (t) => [

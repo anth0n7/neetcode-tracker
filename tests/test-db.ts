@@ -1,26 +1,23 @@
-export const TEST_DATABASE_URL = "postgres://test:test@localhost:5433/neetcode_tracker_test";
+import { randomUUID } from "node:crypto";
+import { tmpdir } from "node:os";
+import path from "node:path";
 
-const ALLOWED_HOSTS = ["localhost", "127.0.0.1"];
-const ALLOWED_PORT = "5433";
-const ALLOWED_DATABASE = "neetcode_tracker_test";
+export const TEST_DATABASE_DIR = path.join(tmpdir(), "neetcode-tracker-tests");
+const SUFFIX = ".test.db";
 
-export function assertTestDatabaseUrl(url: string | undefined): asserts url is string {
+export const newTestDatabasePath = () => path.join(TEST_DATABASE_DIR, `${randomUUID()}${SUFFIX}`);
+
+export function assertTestDatabasePath(file: string | undefined): asserts file is string {
   const refuse = (why: string) =>
     new Error(
-      `Refusing to run: the test suite may only use the test database ` +
-        `(localhost:${ALLOWED_PORT}/${ALLOWED_DATABASE}). ${why}`,
+      `Refusing to run: the test suite may only use a throwaway test database ` +
+        `(a *${SUFFIX} file directly inside ${TEST_DATABASE_DIR}). ${why}`,
     );
 
-  if (!url) throw refuse("No database URL was given.");
+  if (!file) throw refuse("No database path was given.");
+  if (!path.isAbsolute(file)) throw refuse("The database path is not absolute.");
 
-  let parsed: URL;
-  try {
-    parsed = new URL(url);
-  } catch {
-    throw refuse("The database URL could not be parsed.");
-  }
-
-  if (!ALLOWED_HOSTS.includes(parsed.hostname)) throw refuse(`Host "${parsed.hostname}" is not this machine.`);
-  if (parsed.port !== ALLOWED_PORT) throw refuse(`Port "${parsed.port || "5432 (default)"}" is not ${ALLOWED_PORT}.`);
-  if (parsed.pathname !== `/${ALLOWED_DATABASE}`) throw refuse(`Database "${parsed.pathname.slice(1)}" is not the test database.`);
+  const resolved = path.resolve(file);
+  if (path.dirname(resolved) !== TEST_DATABASE_DIR) throw refuse(`"${resolved}" is not inside the test folder.`);
+  if (!resolved.endsWith(SUFFIX)) throw refuse(`"${path.basename(resolved)}" does not end in ${SUFFIX}.`);
 }

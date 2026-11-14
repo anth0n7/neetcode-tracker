@@ -1,14 +1,33 @@
-import { drizzle } from "drizzle-orm/node-postgres";
-import { Pool } from "pg";
+import { mkdirSync } from "node:fs";
+import path from "node:path";
+import { createClient, type Client } from "@libsql/client";
+import { drizzle, type LibSQLDatabase } from "drizzle-orm/libsql";
 import * as schema from "@/db/schema";
+import { databaseFile } from "./database-file";
 
-const globalForDb = globalThis as unknown as { pgPool?: Pool };
+type Database = LibSQLDatabase<typeof schema> & { $client: Client };
 
-function createPool(): Pool {
-  const url = process.env.DATABASE_URL;
-  if (!url) throw new Error("DATABASE_URL is not set");
-  return new Pool({ connectionString: url });
+const globalForDb = globalThis as unknown as { sqliteClient?: Client; sqliteDb?: Database };
+
+export function getClient(): Client {
+  if (!globalForDb.sqliteClient) {
+    const file = databaseFile();
+    mkdirSync(path.dirname(file), { recursive: true });
+    globalForDb.sqliteClient = createClient({ url: `file:${file}` });
+  }
+  return globalForDb.sqliteClient;
 }
 
-export const pool = (globalForDb.pgPool ??= createPool());
-export const db = drizzle(pool, { schema });
+function getDb(): Database {
+  return (globalForDb.sqliteDb ??= drizzle(getClient(), { schema }));
+}
+
+// Opening the file is deferred to first use: `next build` imports every route
+// module to collect its config, and no database exists or should be created then.
+export const db = new Proxy({} as Database, {
+  get(_target, key) {
+    const real = getDb();
+    const value = Reflect.get(real, key);
+    return typeof value === "function" ? value.bind(real) : value;
+  },
+});
