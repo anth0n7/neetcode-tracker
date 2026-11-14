@@ -26,10 +26,10 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --canvas: #09090b;
-    --surface: #111113;
-    --subtle: #1a1a1d;
-    --line: #27272a;
+    --canvas: #18181b;
+    --surface: #1f1f23;
+    --subtle: #2a2a2f;
+    --line: #2e2e33;
     --ink: #fafafa;
     --muted: #a1a1aa;
     --accent: #818cf8;
