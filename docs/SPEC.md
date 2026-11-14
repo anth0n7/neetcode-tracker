@@ -76,6 +76,14 @@ When the server starts, `instrumentation.ts` calls `lib/startup.ts`, which:
 2. Applies any pending migrations from `/drizzle`.
 3. Upserts the problem list (`SEED_FILE`, default `data/neetcode250.json`). The fixture may only go into `dev.db` or a `*.test.db` file, so fixture rows can never reach the real database.
 
+### When something fails
+
+- **Startup.** If the backup, migrations or problem upsert fail, the server prints one line starting `STARTUP FAILED:` with a plain-language reason (damaged database, full disk, no permission, or the original message) and exits. The desktop app shows that reason in its "could not start" dialog.
+- **A page.** `app/error.tsx` shows "Something went wrong loading this page" with Try again. Production builds hide the server's error message from the page, so it shows the error ID instead; the server log has the full error under that ID.
+- **A missing page or problem.** `app/not-found.tsx` and `app/problems/[id]/not-found.tsx`.
+- **The server stops while the app is open.** The app offers Restart or Quit.
+- **Restoring a backup** is done by hand; the README has the steps.
+
 ### Steps
 
 1. **Development.** `npm run dev` runs `next dev -p 3001 -H 127.0.0.1` against `data/dev.db`. The file and its tables are created on first start.

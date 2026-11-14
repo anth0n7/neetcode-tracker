@@ -24,7 +24,7 @@ and how we work together is in [CLAUDE.md](CLAUDE.md). Tick boxes as stages land
 | 8 | Switch to SQLite (branch `stage-8-sqlite`) | Done, PR open. `npm run check` passes (306 tests); checked by hand on the sandbox and dev databases |
 | 9 | Electron spike (branch `stage-9-electron-spike`, not merged) | Done. All four pass criteria met, no fallbacks needed; you checked the window by hand |
 | 10 | The Electron app (branch `stage-10-electron`) | Done, PR open. Installed in /Applications and checked in trial mode; the real database is not created yet |
-| 11 | Error pages and README | |
+| 11 | Error pages and README (branch `stage-11-finish`) | Done, PR open. Fresh-clone test passed after the `next typegen` fix; you checked both app dialogs by hand |
 
 289 tests pass (as of the last commit of PR #3). The real database holds the 250 problems and no attempts. The dev
 database holds 5 fake fixture problems.

@@ -3,13 +3,20 @@ import fs from "node:fs";
 import http from "node:http";
 import net from "node:net";
 import path from "node:path";
-import { databasePath, linkTarget } from "./rules.mjs";
+import { databasePath, linkTarget, startupFailure } from "./rules.mjs";
 
 const SERVER_DIR = path.join(import.meta.dirname, "server");
 const START_TIMEOUT_MS = 20_000;
+const KEEP_OUTPUT_CHARS = 64_000;
 
 let server = null;
+let serverOutput = "";
+let appOrigin = null;
 let window = null;
+let quitting = false;
+let log = null;
+
+const logFile = () => path.join(app.getPath("userData"), "logs", "server.log");
 
 function freePort() {
   return new Promise((resolve, reject) => {
@@ -33,17 +40,72 @@ function answers(url) {
   });
 }
 
+function stoppedReason() {
+  return startupFailure(serverOutput) ?? `The app's server stopped unexpectedly. Details are in ${logFile()}.`;
+}
+
 async function waitUntilAnswering(url) {
   const deadline = Date.now() + START_TIMEOUT_MS;
   while (Date.now() < deadline) {
-    if (server === null) throw new Error("The app's server stopped while starting. See logs/server.log in the app's data folder.");
+    if (server === null) throw new Error(stoppedReason());
     if (await answers(url)) return;
     await new Promise((r) => setTimeout(r, 200));
   }
-  throw new Error(`The app's server did not start within ${START_TIMEOUT_MS / 1000} seconds.`);
+  throw new Error(`The app's server did not start within ${START_TIMEOUT_MS / 1000} seconds. Details are in ${logFile()}.`);
 }
 
-function keepLinksInPlace(win, appOrigin) {
+async function startServer() {
+  const port = await freePort();
+  appOrigin = `http://127.0.0.1:${port}`;
+  serverOutput = "";
+
+  const child = utilityProcess.fork(path.join(SERVER_DIR, "server.js"), [], {
+    cwd: SERVER_DIR,
+    stdio: "pipe",
+    env: {
+      ...process.env,
+      NODE_ENV: "production",
+      HOSTNAME: "127.0.0.1",
+      PORT: String(port),
+      DATABASE_PATH: databasePath(process.env, app.getPath("userData")),
+    },
+  });
+  for (const stream of [child.stdout, child.stderr]) {
+    stream.pipe(log, { end: false });
+    stream.on("data", (chunk) => {
+      serverOutput = (serverOutput + chunk.toString()).slice(-KEEP_OUTPUT_CHARS);
+    });
+  }
+  child.on("exit", (code) => {
+    log.write(`[${new Date().toISOString()}] server exited with code ${code}\n`);
+    if (server !== child) return;
+    server = null;
+    if (!quitting && window) void offerRestart();
+  });
+  server = child;
+
+  await waitUntilAnswering(appOrigin);
+}
+
+async function offerRestart() {
+  const { response } = await dialog.showMessageBox(window, {
+    type: "error",
+    message: "NeetCode Tracker stopped working",
+    detail: stoppedReason(),
+    buttons: ["Restart", "Quit"],
+    defaultId: 0,
+    cancelId: 1,
+  });
+  if (response !== 0) return app.quit();
+  try {
+    await startServer();
+    await window.loadURL(appOrigin);
+  } catch (error) {
+    fail(error);
+  }
+}
+
+function keepLinksInPlace(win) {
   win.webContents.setWindowOpenHandler(({ url }) => {
     if (linkTarget(url, appOrigin) === "browser") void shell.openExternal(url);
     return { action: "deny" };
@@ -57,35 +119,13 @@ function keepLinksInPlace(win, appOrigin) {
 }
 
 async function start() {
-  const logDir = path.join(app.getPath("userData"), "logs");
-  fs.mkdirSync(logDir, { recursive: true });
-  const log = fs.createWriteStream(path.join(logDir, "server.log"), { flags: "a" });
+  fs.mkdirSync(path.dirname(logFile()), { recursive: true });
+  log = fs.createWriteStream(logFile(), { flags: "a" });
 
-  const port = await freePort();
-  const appOrigin = `http://127.0.0.1:${port}`;
-
-  server = utilityProcess.fork(path.join(SERVER_DIR, "server.js"), [], {
-    cwd: SERVER_DIR,
-    stdio: "pipe",
-    env: {
-      ...process.env,
-      NODE_ENV: "production",
-      HOSTNAME: "127.0.0.1",
-      PORT: String(port),
-      DATABASE_PATH: databasePath(process.env, app.getPath("userData")),
-    },
-  });
-  server.stdout.pipe(log);
-  server.stderr.pipe(log);
-  server.on("exit", (code) => {
-    log.write(`[${new Date().toISOString()}] server exited with code ${code}\n`);
-    server = null;
-  });
-
-  await waitUntilAnswering(appOrigin);
+  await startServer();
 
   window = new BrowserWindow({ width: 1200, height: 820, title: "NeetCode Tracker" });
-  keepLinksInPlace(window, appOrigin);
+  keepLinksInPlace(window);
   window.on("closed", () => {
     window = null;
   });
@@ -94,6 +134,13 @@ async function start() {
 
 function stopServer() {
   if (server) server.kill();
+}
+
+function fail(error) {
+  quitting = true;
+  stopServer();
+  dialog.showErrorBox("NeetCode Tracker could not start", String(error?.message ?? error));
+  app.quit();
 }
 
 // A second copy would start a second server on the same database file.
@@ -106,14 +153,14 @@ if (!app.requestSingleInstanceLock()) {
     window.focus();
   });
   app.on("window-all-closed", () => {
+    quitting = true;
     stopServer();
     app.quit();
   });
-  app.on("before-quit", stopServer);
+  app.on("before-quit", () => {
+    quitting = true;
+    stopServer();
+  });
 
-  app.whenReady().then(start).catch((error) => {
-    stopServer();
-    dialog.showErrorBox("NeetCode Tracker could not start", String(error?.message ?? error));
-    app.quit();
-  });
+  app.whenReady().then(start).catch(fail);
 }

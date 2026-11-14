@@ -5,6 +5,7 @@ import { drizzle } from "drizzle-orm/libsql";
 import { migrate } from "drizzle-orm/libsql/migrator";
 import * as schema from "@/db/schema";
 import { backupDatabase } from "./backup";
+import { describeStartupError, STARTUP_FAILED } from "./startup-error";
 import { databaseFile } from "./database-file";
 import { assertSeedAllowed, readSeedFile, upsertProblems } from "./seed";
 import { todayLocal } from "./today";
@@ -53,4 +54,15 @@ export async function prepareDatabaseFromEnv(): Promise<void> {
     seedFile: path.resolve(/*turbopackIgnore: true*/ process.env.SEED_FILE ?? REAL_SEED_FILE),
     today: todayLocal(),
   });
+}
+
+export async function prepareDatabaseOrExit(): Promise<void> {
+  try {
+    await prepareDatabaseFromEnv();
+  } catch (error) {
+    // Left running, the server would answer every request with an error instead of stopping.
+    console.error(`${STARTUP_FAILED} ${describeStartupError(error)}`);
+    console.error(error);
+    process.exit(1);
+  }
 }

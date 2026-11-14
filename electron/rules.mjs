@@ -26,3 +26,15 @@ export function linkTarget(url, appOrigin) {
   if (parsed.protocol === "https:" || parsed.protocol === "http:") return "browser";
   return "block";
 }
+
+const STARTUP_FAILED = "STARTUP FAILED:";
+
+/**
+ * @param {string} logText
+ * @returns {string | null}
+ */
+export function startupFailure(logText) {
+  const lines = logText.split("\n").filter((line) => line.startsWith(STARTUP_FAILED));
+  if (lines.length === 0) return null;
+  return lines[lines.length - 1].slice(STARTUP_FAILED.length).trim();
+}
