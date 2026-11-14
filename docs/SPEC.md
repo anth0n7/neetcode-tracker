@@ -42,6 +42,9 @@ A single-user web app that tracks the NeetCode 250 problem list and shows each d
 /scripts/fetch-neetcode250.ts  one-time pull from neetcode.io
 /scripts/seed.ts            upserts a seed file into the database
 /scripts/fill-sandbox.ts    rebuilds the sandbox database for manual checks
+/electron/main.mjs          desktop app: starts the server, opens the window
+/electron/rules.mjs         which database file to open, where a link should go
+/scripts/package-app.mts    packages the desktop app into dist/
 /tests/scheduler.test.ts
 /docs/SPEC.md               this file
 ```
@@ -58,7 +61,7 @@ Every database is one SQLite file. `DATABASE_PATH` names it; there is no default
 
 | Database | File | Used by | Problems |
 |---|---|---|---|
-| Real | `~/Library/Application Support/NeetCode Tracker/neetcode-tracker.db` | `npm start` (port 3000) | `data/neetcode250.json` |
+| Real | `~/Library/Application Support/NeetCode Tracker/data/neetcode-tracker.db` | `npm start` (port 3000) | `data/neetcode250.json` |
 | Dev | `data/dev.db` (git-ignored) | `npm run dev` (port 3001), `npm run seed:dev` | `data/fixture.json` |
 | Sandbox | `data/sandbox.db` (git-ignored) | `npm run start:sandbox` (port 3002); rebuilt by `npm run sandbox:fill` with sample attempts | `data/neetcode250.json` |
 | Tests | a `*.test.db` file per test file in the temp folder | `npm test` | per test |
@@ -78,7 +81,7 @@ When the server starts, `instrumentation.ts` calls `lib/startup.ts`, which:
 1. **Development.** `npm run dev` runs `next dev -p 3001 -H 127.0.0.1` against `data/dev.db`. The file and its tables are created on first start.
 2. **Manual checks.** `npm run sandbox:fill`, then `npm run build` and `npm run start:sandbox`.
 3. **Localhost only.** Every server binds to `127.0.0.1`. Without that flag, `next start` listens on all interfaces, and the app has no login and has delete endpoints.
-4. **Desktop app.** Stages 9 to 11 in `plan.md` wrap the app in Electron.
+4. **Desktop app.** `npm run app:install` builds the app, checks its contents (migrations, problem list and native SQLite binary present; no database files inside) and replaces `/Applications/NeetCode Tracker.app`. It refuses while the app is running. The app starts the built Next server on a free `127.0.0.1` port and shows it in one window. Opened normally, it uses the real database; `npm run app:sandbox` opens it on a trial copy of `data/sandbox.db` in `~/Library/Application Support/NeetCode Tracker/trial/` instead (made on first use, kept across launches, replaced with `npm run app:sandbox -- --fresh`). The copy lives there, not in the project, because macOS blocks a freshly built app from reading `~/Documents` until it is approved again after every rebuild. Links to other websites open in the default browser. Only one copy runs at a time. Server logs go to `~/Library/Application Support/NeetCode Tracker/logs/server.log`.
 
 ---
 

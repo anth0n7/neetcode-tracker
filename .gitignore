@@ -45,3 +45,6 @@ next-env.d.ts
 /data/*.db
 /data/*.db-journal
 /data/backups/
+
+# packaged desktop app
+/dist/
